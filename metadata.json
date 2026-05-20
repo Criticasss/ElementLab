@@ -1,0 +1,6 @@
+{
+  "name": "ElementLab",
+  "description": "Un fascinante juego de cuadrícula de sinergias y fórmulas alquímicas. Combina elementos en el tablero de 3x3 para superar las cuotas y usa la IA para forjar tus cartas personalizadas.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
