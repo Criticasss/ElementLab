@@ -156,9 +156,9 @@ export default function App() {
               <div className="max-w-3xl font-sans text-left">
                 <h3 className="font-extrabold text-2xl uppercase tracking-tight italic">¿CÓMO SE JUEGA A ESTA ALQUIMIA?</h3>
                 <p className="text-sm text-white/95 mt-2 leading-relaxed font-medium">
-                  1. <strong className="underline decoration-yellow-300 decoration-2">Revisa las recetas</strong> en el catálogo <strong className="font-extrabold">2. Libro de Fórmulas</strong> para dominar las combinaciones y sus suculentos bonos.<br />
-                  2. <strong className="underline decoration-yellow-300 decoration-2">Coloca elementos</strong> de tu mano en la <strong className="font-extrabold">1. Rejilla Alquímica</strong> (tablero 3x3) de forma adyacente para detonar fusiones espontáneas y ganar oro.<br />
-                  3. <strong className="underline decoration-yellow-300 decoration-2">Crea tus propias cartas</strong> en el <strong className="font-extrabold">3. Alquimia de IA</strong> usando tus ideas más ingeniosas e inyéctalas directamente al tablero en tiempo real.
+                  1. <strong className="underline decoration-yellow-300 decoration-2">Revisa las recetas</strong> en la pestaña <strong className="font-extrabold">2. Libro de Fórmulas</strong> para dominar las combinaciones y sus suculentos bonos.<br />
+                  2. <strong className="underline decoration-yellow-300 decoration-2">Coloca elementos</strong> de tu mano en la pestaña <strong className="font-extrabold">1. Rejilla Alquímica</strong> (tablero 3x3) de forma adyacente para detonar fusiones espontáneas y ganar oro.<br />
+                  3. <strong className="underline decoration-yellow-300 decoration-2">Crea tus propias cartas</strong> en la pestaña <strong className="font-extrabold">3. Alquimia de IA</strong> usando tus ideas más ingeniosas e inyéctalas directamente al tablero en tiempo real.
                 </p>
               </div>
             </div>
