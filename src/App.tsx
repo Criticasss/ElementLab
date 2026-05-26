@@ -27,6 +27,14 @@ export default function App() {
   const [showHowToPlay, setShowHowToPlay] = useState(true);
   const [activeAccount, setActiveAccount] = useState<Account | null>(null);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
+  const [activeTheme, setActiveTheme] = useState<string>(() => {
+    try {
+      return localStorage.getItem("alquimia_global_theme") || "default";
+    } catch {
+      return "default";
+    }
+  });
+
   const [globalBroadcast, setGlobalBroadcast] = useState<{
     message: string;
     author: string;
@@ -45,7 +53,13 @@ export default function App() {
       try {
         const saved = localStorage.getItem("alquimia_global_broadcast");
         setGlobalBroadcast(saved ? JSON.parse(saved) : null);
-      } catch {
+      } catch (e) {
+        // Safe play
+      }
+      try {
+        const savedTheme = localStorage.getItem("alquimia_global_theme");
+        setActiveTheme(savedTheme || "default");
+      } catch (e) {
         // Safe play
       }
     };
@@ -144,11 +158,100 @@ export default function App() {
     }
   };
 
+  const themeConfig = {
+    default: {
+      wrapperBg: "bg-[#111827] text-slate-100",
+      glow1: "bg-pink-500/5",
+      glow2: "bg-cyan-500/5",
+      selectionColor: "selection:bg-[#F43F5E] selection:text-white"
+    },
+    selva: {
+      wrapperBg: "bg-[#021f14] text-emerald-100",
+      glow1: "bg-emerald-500/10",
+      glow2: "bg-amber-400/10",
+      selectionColor: "selection:bg-emerald-500 selection:text-black"
+    },
+    mar: {
+      wrapperBg: "bg-[#021325] text-cyan-200",
+      glow1: "bg-cyan-400/10",
+      glow2: "bg-teal-500/10",
+      selectionColor: "selection:bg-cyan-400 selection:text-black"
+    },
+    infierno: {
+      wrapperBg: "bg-[#1c0202] text-red-200",
+      glow1: "bg-red-600/10",
+      glow2: "bg-amber-600/10",
+      selectionColor: "selection:bg-red-500 selection:text-white"
+    },
+    cyberpunk: {
+      wrapperBg: "bg-[#07070a] text-[#a5f3fc]",
+      glow1: "bg-[#EC4899]/10",
+      glow2: "bg-[#22C55E]/10",
+      selectionColor: "selection:bg-[#EC4899] selection:text-black"
+    }
+  };
+
+  const currentTheme = themeConfig[activeTheme as keyof typeof themeConfig] || themeConfig.default;
+
+  const renderThemeAtmosphericEffects = () => {
+    switch (activeTheme) {
+      case "selva":
+        return (
+          <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
+            <div className="absolute left-[10%] text-emerald-400/30 text-2xl animate-rise-up-slow" style={{ animationDelay: "0s" }}>🍃</div>
+            <div className="absolute left-[30%] text-amber-500/20 text-3xl animate-rise-up-medium" style={{ animationDelay: "2s" }}>🍂</div>
+            <div className="absolute left-[55%] text-emerald-500/25 text-xl animate-rise-up-fast" style={{ animationDelay: "1s" }}>🌱</div>
+            <div className="absolute left-[70%] text-green-300/30 text-2xl animate-rise-up-slow" style={{ animationDelay: "3s" }}>🌿</div>
+            <div className="absolute left-[85%] text-emerald-400/20 text-4xl animate-rise-up-medium" style={{ animationDelay: "5s" }}>🍁</div>
+            <div className="absolute left-[45%] text-emerald-500/15 text-2xl animate-rise-up-fast" style={{ animationDelay: "4s" }}>🍀</div>
+          </div>
+        );
+      case "mar":
+        return (
+          <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
+            <div className="absolute left-[15%] text-cyan-400/25 text-2xl animate-rise-up-slow" style={{ animationDelay: "0s" }}>🫧</div>
+            <div className="absolute left-[25%] text-teal-400/20 text-3xl animate-rise-up-medium" style={{ animationDelay: "3s" }}>💧</div>
+            <div className="absolute left-[40%] text-cyan-300/20 text-xl animate-rise-up-fast" style={{ animationDelay: "1.5s" }}>🫧</div>
+            <div className="absolute left-[65%] text-blue-400/25 text-4xl animate-rise-up-slow" style={{ animationDelay: "4s" }}>🫧</div>
+            <div className="absolute left-[80%] text-cyan-400/20 text-2xl animate-rise-up-medium" style={{ animationDelay: "2s" }}>💧</div>
+            <div className="absolute left-[90%] text-sky-300/15 text-3xl animate-rise-up-fast" style={{ animationDelay: "5s" }}>🫧</div>
+          </div>
+        );
+      case "infierno":
+        return (
+          <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
+            <div className="absolute left-[12%] text-red-500/20 text-3xl animate-rise-up-slow" style={{ animationDelay: "0s" }}>🔥</div>
+            <div className="absolute left-[28%] text-amber-500/25 text-xl animate-rise-up-medium" style={{ animationDelay: "2.5s" }}>✨</div>
+            <div className="absolute left-[48%] text-red-600/15 text-4xl animate-rise-up-fast" style={{ animationDelay: "1s" }}>🌋</div>
+            <div className="absolute left-[68%] text-orange-500/25 text-2xl animate-rise-up-slow" style={{ animationDelay: "3.5s" }}>🔥</div>
+            <div className="absolute left-[83%] text-amber-400/20 text-xl animate-rise-up-medium" style={{ animationDelay: "5s" }}>✨</div>
+            <div className="absolute left-[58%] text-red-500/10 text-3xl animate-rise-up-fast" style={{ animationDelay: "4.2s" }}>💥</div>
+          </div>
+        );
+      case "cyberpunk":
+        return (
+          <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
+            <div className="absolute left-[8%] text-[#EC4899]/25 text-xl animate-rise-up-slow" style={{ animationDelay: "0s" }}>👾</div>
+            <div className="absolute left-[24%] text-[#22C55E]/20 text-2xl animate-rise-up-medium" style={{ animationDelay: "2s" }}>⚡</div>
+            <div className="absolute left-[46%] text-[#a5f3fc]/25 text-3xl animate-rise-up-fast" style={{ animationDelay: "1s" }}>🧬</div>
+            <div className="absolute left-[62%] text-[#EC4899]/15 text-2xl animate-rise-up-slow" style={{ animationDelay: "3s" }}>✨</div>
+            <div className="absolute left-[78%] text-[#22C55E]/25 text-xl animate-rise-up-medium" style={{ animationDelay: "5s" }}>👾</div>
+            <div className="absolute left-[92%] text-[#EC4899]/10 text-3xl animate-rise-up-fast" style={{ animationDelay: "4s" }}>⚡</div>
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-[#111827] text-slate-100 font-sans relative overflow-x-hidden flex flex-col justify-between selection:bg-[#F43F5E] selection:text-white">
+    <div className={`min-h-screen text-slate-100 font-sans relative overflow-x-hidden flex flex-col justify-between transition-colors duration-1000 ${currentTheme.wrapperBg} ${currentTheme.selectionColor}`}>
       {/* Background Gradients */}
-      <div className="absolute top-0 left-1/4 w-[35rem] h-[35rem] bg-pink-500/5 rounded-full filter blur-[100px] pointer-events-none"></div>
-      <div className="absolute bottom-10 right-1/4 w-[30rem] h-[30rem] bg-cyan-500/5 rounded-full filter blur-[100px] pointer-events-none"></div>
+      <div className={`absolute top-0 left-1/4 w-[35rem] h-[35rem] rounded-full filter blur-[100px] pointer-events-none transition-colors duration-1000 ${currentTheme.glow1}`}></div>
+      <div className={`absolute bottom-10 right-1/4 w-[30rem] h-[30rem] rounded-full filter blur-[100px] pointer-events-none transition-colors duration-1000 ${currentTheme.glow2}`}></div>
+
+      {/* Floating Elements Atmospheric Overlays */}
+      {renderThemeAtmosphericEffects()}
 
       {/* Main Container */}
       <div className="w-full max-w-7xl mx-auto px-4 md:px-6 py-8 flex-1 flex flex-col gap-8 relative z-10">
@@ -159,6 +262,21 @@ export default function App() {
           }
           .animate-global-marquee {
             animation: globalMarquee 30s linear infinite;
+          }
+          @keyframes riseUp {
+            0% { transform: translateY(110vh) rotate(0deg); opacity: 0; }
+            10% { opacity: 0.6; }
+            90% { opacity: 0.6; }
+            100% { transform: translateY(-20vh) rotate(360deg); opacity: 0; }
+          }
+          .animate-rise-up-slow {
+            animation: riseUp 14s linear infinite;
+          }
+          .animate-rise-up-medium {
+            animation: riseUp 9s linear infinite;
+          }
+          .animate-rise-up-fast {
+            animation: riseUp 6s linear infinite;
           }
         `}} />
 
@@ -368,6 +486,17 @@ export default function App() {
         onClose={() => setIsAdminOpen(false)}
         activeAccount={activeAccount}
         onUpdateAccountData={handleUpdateAccountData}
+        activeTheme={activeTheme}
+        onThemeChange={(newTheme) => {
+          setActiveTheme(newTheme);
+          try {
+            localStorage.setItem("alquimia_global_theme", newTheme);
+            window.dispatchEvent(new Event("storage"));
+            window.dispatchEvent(new CustomEvent("local-broadcast-update"));
+          } catch (e) {
+            console.error(e);
+          }
+        }}
       />
 
       {/* Footer */}

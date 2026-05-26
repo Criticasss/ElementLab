@@ -14,7 +14,11 @@ import {
   Sparkles,
   RotateCcw,
   CheckCircle2,
-  AlertTriangle
+  AlertTriangle,
+  Palette,
+  Flame,
+  Waves,
+  Trees
 } from "lucide-react";
 
 interface AdminPanelProps {
@@ -22,13 +26,17 @@ interface AdminPanelProps {
   onClose: () => void;
   activeAccount: Account | null;
   onUpdateAccountData: (updatedFields: Partial<Account>) => void;
+  activeTheme: string;
+  onThemeChange: (theme: string) => void;
 }
 
 export default function AdminPanel({
   isOpen,
   onClose,
   activeAccount,
-  onUpdateAccountData
+  onUpdateAccountData,
+  activeTheme,
+  onThemeChange
 }: AdminPanelProps) {
   const [pinCode, setPinCode] = useState<string>("");
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
@@ -541,6 +549,113 @@ export default function AdminPanel({
                         >
                           Apagar Marquesina Activa
                         </button>
+                      </div>
+
+                      {/* Section: Custom Themes / Style Sintonizer */}
+                      <div className="space-y-2 bg-[#1f2937]/50 p-4 rounded-3xl border-2 border-slate-800 text-left">
+                        <h4 className="text-[10px] uppercase font-black tracking-widest text-[#A855F7] flex items-center gap-1.5 border-b border-slate-800 pb-1 mb-2.5 font-mono">
+                          🎨 Sintonizador de Estilos (Temas Atmosféricos)
+                        </h4>
+                        <p className="text-[10px] text-gray-400 font-semibold mb-2">
+                          Cambia el ambiente celestial de toda la web en tiempo real. Activa efectos y esquemas de color:
+                        </p>
+                        
+                        <div className="grid grid-cols-2 gap-2">
+                          {/* Selva Theme Button */}
+                          <button
+                            onClick={() => {
+                              onThemeChange("selva");
+                              playSound("levelUp");
+                              setStatusLog("Ambiente sintonizado: ¡Selva Esmeralda de Gaea!");
+                            }}
+                            className={`px-3 py-2.5 rounded-xl border-2 border-black flex items-center justify-between text-left cursor-pointer transition-all ${
+                              activeTheme === "selva"
+                                ? "bg-emerald-600 text-white font-black shadow-[3px_3px_0px_rgba(0,0,0,1)] translate-y-[-2px]"
+                                : "bg-slate-900 text-gray-300 hover:bg-slate-800"
+                            }`}
+                          >
+                            <span className="text-xs uppercase font-extrabold flex items-center gap-2">
+                              <Trees className="w-4 h-4 text-emerald-400 shrink-0" />
+                              Selva
+                            </span>
+                            <span className="text-[10px] bg-black/40 px-1.5 py-0.5 rounded text-white shrink-0">🍃</span>
+                          </button>
+
+                          {/* Mar Theme Button */}
+                          <button
+                            onClick={() => {
+                              onThemeChange("mar");
+                              playSound("levelUp");
+                              setStatusLog("Ambiente sintonizado: ¡Fondo Marino de Poseidón!");
+                            }}
+                            className={`px-3 py-2.5 rounded-xl border-2 border-black flex items-center justify-between text-left cursor-pointer transition-all ${
+                              activeTheme === "mar"
+                                ? "bg-cyan-600 text-white font-black shadow-[3px_3px_0px_rgba(0,0,0,1)] translate-y-[-2px]"
+                                : "bg-slate-900 text-gray-300 hover:bg-slate-800"
+                            }`}
+                          >
+                            <span className="text-xs uppercase font-extrabold flex items-center gap-2">
+                              <Waves className="w-4 h-4 text-cyan-300 shrink-0" />
+                              Mar
+                            </span>
+                            <span className="text-[10px] bg-black/40 px-1.5 py-0.5 rounded text-white shrink-0">🫧</span>
+                          </button>
+
+                          {/* Infierno Theme Button */}
+                          <button
+                            onClick={() => {
+                              onThemeChange("infierno");
+                              playSound("levelUp");
+                              setStatusLog("Ambiente sintonizado: ¡Foso de Alquimia de Lava!");
+                            }}
+                            className={`px-3 py-2.5 rounded-xl border-2 border-black flex items-center justify-between text-left cursor-pointer transition-all ${
+                              activeTheme === "infierno"
+                                ? "bg-red-700 text-white font-black shadow-[3px_3px_0px_rgba(0,0,0,1)] translate-y-[-2px]"
+                                : "bg-slate-900 text-gray-300 hover:bg-slate-800"
+                            }`}
+                          >
+                            <span className="text-xs uppercase font-extrabold flex items-center gap-2">
+                              <Flame className="w-4 h-4 text-amber-500 shrink-0" />
+                              Lava
+                            </span>
+                            <span className="text-[10px] bg-black/40 px-1.5 py-0.5 rounded text-white shrink-0">🔥</span>
+                          </button>
+
+                          {/* Cyberpunk Theme Button */}
+                          <button
+                            onClick={() => {
+                              onThemeChange("cyberpunk");
+                              playSound("levelUp");
+                              setStatusLog("Ambiente sintonizado: ¡Fisión Neón Cyberpunk!");
+                            }}
+                            className={`px-3 py-2.5 rounded-xl border-2 border-black flex items-center justify-between text-left cursor-pointer transition-all ${
+                              activeTheme === "cyberpunk"
+                                ? "bg-[#EC4899] text-white font-black shadow-[3px_3px_0px_rgba(0,0,0,1)] translate-y-[-2px]"
+                                : "bg-slate-900 text-gray-300 hover:bg-slate-800"
+                            }`}
+                          >
+                            <span className="text-xs uppercase font-extrabold flex items-center gap-2">
+                              <Palette className="w-4 h-4 text-yellow-300 shrink-0" />
+                              Cyberpunk
+                            </span>
+                            <span className="text-[10px] bg-black/40 px-1.5 py-0.5 rounded text-white shrink-0">🧬</span>
+                          </button>
+                        </div>
+
+                        {/* Reset / Eliminate Custom Theme Button */}
+                        <div className="pt-2 border-t border-slate-800/80 mt-2">
+                          <button
+                            onClick={() => {
+                              onThemeChange("default");
+                              playSound("click");
+                              setStatusLog("Tema restablecido. Retorno al Vacío Astral.");
+                            }}
+                            className="w-full py-2 bg-slate-900 text-slate-400 hover:text-white hover:bg-indigo-950 border-2 border-dashed border-slate-800 hover:border-indigo-500 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            Eliminar Tema / Estilo Personalizado
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}

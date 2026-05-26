@@ -1104,6 +1104,93 @@ export default function PlayablePrototype({
               )}
             </div>
 
+            {/* Quick Elixirs Belt */}
+            <div className="bg-[#111827] p-4 rounded-2xl border-4 border-black text-xs mb-4 shadow-[4px_4px_0px_rgba(0,0,0,0.3)]">
+              <h5 className="text-[10px] uppercase font-mono tracking-widest text-[#10B981] font-black mb-2.5 flex items-center justify-between select-none">
+                <span className="flex items-center gap-1.5">
+                  <Wand2 className="w-4 h-4 text-[#10B981]" /> Cinturón de Pociones de Combate:
+                </span>
+                <span className="text-[8.5px] text-gray-500 font-bold font-mono">// Haz clic para activarlas</span>
+              </h5>
+              
+              {!activeAccount ? (
+                <div className="text-center py-2 text-gray-500 font-bold text-[10px] uppercase font-mono">
+                  Registra tu cuenta para activar pociones en juego
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 gap-2 select-none">
+                  {/* Midas custom potion button */}
+                  {(() => {
+                    const count = activeAccount.potions?.midas || 0;
+                    return (
+                      <button
+                        onClick={usePotionMidas}
+                        disabled={count <= 0}
+                        className={`p-2 rounded-xl border-2 flex flex-col items-center justify-center transition-all ${
+                          count > 0
+                            ? "bg-slate-800 border-amber-400 hover:bg-amber-400/10 cursor-pointer shadow-[2px_2px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-[1px_1px_0px_rgba(0,0,0,1)] text-[#fff]"
+                            : "bg-slate-900 border-slate-800/80 text-gray-600 cursor-not-allowed opacity-50"
+                        }`}
+                        title="Poción de Midas: Genera +40 de Oro instantáneamente"
+                      >
+                        <span className="text-xl">🧪</span>
+                        <span className="text-[9.5px] font-black uppercase text-white mt-1 font-mono">Midas</span>
+                        <span className={`text-[8.5px] font-mono font-black mt-0.5 px-1.5 py-0.2 rounded ${count > 0 ? "bg-amber-500 text-black animate-pulse" : "bg-black/40 text-gray-500"}`}>
+                          Cant: {count}
+                        </span>
+                      </button>
+                    );
+                  })()}
+
+                  {/* Time custom potion button */}
+                  {(() => {
+                    const count = activeAccount.potions?.time || 0;
+                    return (
+                      <button
+                        onClick={usePotionTime}
+                        disabled={count <= 0}
+                        className={`p-2 rounded-xl border-2 flex flex-col items-center justify-center transition-all ${
+                          count > 0
+                            ? "bg-slate-800 border-emerald-400 hover:bg-emerald-400/10 cursor-pointer shadow-[2px_2px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-[1px_1px_0px_rgba(0,0,0,1)] text-[#fff]"
+                            : "bg-slate-900 border-slate-800/80 text-gray-600 cursor-not-allowed opacity-50"
+                        }`}
+                        title="Filtro de Tiempo: Añade +2 turnos de colocación"
+                      >
+                        <span className="text-xl">🕰️</span>
+                        <span className="text-[9.5px] font-black uppercase text-white mt-1 font-mono">Tiempo</span>
+                        <span className={`text-[8.5px] font-mono font-black mt-0.5 px-1.5 py-0.2 rounded ${count > 0 ? "bg-emerald-400 text-black animate-pulse" : "bg-black/40 text-gray-500"}`}>
+                          Cant: {count}
+                        </span>
+                      </button>
+                    );
+                  })()}
+
+                  {/* Chaos custom potion button */}
+                  {(() => {
+                    const count = activeAccount.potions?.chaos || 0;
+                    return (
+                      <button
+                        onClick={usePotionChaos}
+                        disabled={count <= 0}
+                        className={`p-2 rounded-xl border-2 flex flex-col items-center justify-center transition-all ${
+                          count > 0
+                            ? "bg-slate-800 border-purple-400 hover:bg-purple-400/10 cursor-pointer shadow-[2px_2px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-[1px_1px_0px_rgba(0,0,0,1)] text-[#fff]"
+                            : "bg-slate-900 border-slate-800/80 text-gray-600 cursor-not-allowed opacity-50"
+                        }`}
+                        title="Elíxir de Inestabilidad: Descarta y roba tu mano al completo"
+                      >
+                        <span className="text-xl">🌪️</span>
+                        <span className="text-[9.5px] font-black uppercase text-white mt-1 font-mono">Caos</span>
+                        <span className={`text-[8.5px] font-mono font-black mt-0.5 px-1.5 py-0.2 rounded ${count > 0 ? "bg-purple-500 text-black animate-pulse" : "bg-black/40 text-gray-500"}`}>
+                          Cant: {count}
+                        </span>
+                      </button>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
+
             {/* Fusions recipe helper box */}
             <div className="bg-[#111827] p-4 rounded-2xl border-4 border-black text-xs mb-4 shadow-[4px_4px_0px_rgba(0,0,0,0.3)]">
               <h5 className="text-[10px] uppercase font-mono tracking-widest text-[#F59E0B] font-black mb-2.5 flex items-center gap-1.5 select-none">
