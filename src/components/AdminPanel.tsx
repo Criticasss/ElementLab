@@ -34,6 +34,7 @@ export default function AdminPanel({
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isError, setIsError] = useState<boolean>(false);
   const [statusLog, setStatusLog] = useState<string>("ESPERANDO CÓDIGO DE AUTORIZACIÓN...");
+  const [broadcastInput, setBroadcastInput] = useState<string>("");
 
   // Keyboard listener for pin-pad entry
   useEffect(() => {
@@ -181,6 +182,33 @@ export default function AdminPanel({
     
     onUpdateAccountData({ relics: updatedRelics });
     setStatusLog(`Reliquia [${relicId}] ${isOwned ? "desactivada" : "activada"} en el panel principal.`);
+  };
+
+  const handleSendBroadcast = () => {
+    if (!broadcastInput.trim()) return;
+    playSound("levelUp");
+    const payload = JSON.stringify({
+      message: broadcastInput.trim(),
+      author: activeAccount?.username || "Administrador Supremo",
+      timestamp: Date.now()
+    });
+    localStorage.setItem("alquimia_global_broadcast", payload);
+    window.dispatchEvent(new Event("storage"));
+    window.dispatchEvent(new Event("local-broadcast-update"));
+    setStatusLog(`Anuncio global emitido: "${broadcastInput}"`);
+    setBroadcastInput("");
+  };
+
+  const handlePresetBroadcast = (preset: string) => {
+    setBroadcastInput(preset);
+  };
+
+  const handleClearBroadcast = () => {
+    playSound("click");
+    localStorage.removeItem("alquimia_global_broadcast");
+    window.dispatchEvent(new Event("storage"));
+    window.dispatchEvent(new Event("local-broadcast-update"));
+    setStatusLog("Mensaje global retirado de los cielos.");
   };
 
   return (
@@ -460,6 +488,59 @@ export default function AdminPanel({
                             </div>
                           </div>
                         </div>
+                      </div>
+
+                      {/* Section: Broadcast Message to Everyone */}
+                      <div className="space-y-2 bg-[#1f2937]/50 p-4 rounded-3xl border-2 border-slate-800 text-left">
+                        <h4 className="text-[10px] uppercase font-black tracking-widest text-[#10B981] flex items-center gap-1.5 border-b border-slate-800 pb-1 mb-2.5 font-mono">
+                          📢 Transmisión de Comunicados (Marquesina Celestial)
+                        </h4>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            placeholder="Introduce el anuncio sagrado para todo el reino..."
+                            value={broadcastInput}
+                            onChange={(e) => setBroadcastInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleSendBroadcast();
+                            }}
+                            className="flex-1 px-3 py-1.5 bg-black/40 border-2 border-slate-700 rounded-xl text-xs text-white placeholder-gray-500 font-mono focus:outline-none focus:border-[#10B981]"
+                          />
+                          <button
+                            onClick={handleSendBroadcast}
+                            className="px-3 py-1.5 bg-[#10B981] hover:bg-emerald-600 active:bg-[#10B981]/80 border-2 border-black text-black font-black text-[10px] uppercase rounded-xl transition-all cursor-pointer shadow-[2px_2px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-[1px_1px_0px_rgba(0,0,0,1)] shrink-0"
+                          >
+                            Emitir
+                          </button>
+                        </div>
+                        
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          <button
+                            onClick={() => handlePresetBroadcast("🔥 ¡Tormenta de Éter iniciada por el Consejo!")}
+                            className="px-2 py-0.5 bg-slate-900 border border-slate-800 text-[8.5px] font-black text-slate-300 rounded-md hover:text-white"
+                          >
+                            Preset 🔥
+                          </button>
+                          <button
+                            onClick={() => handlePresetBroadcast("🏆 Concurso Maestro: Sinergia de Doble Oro activa")}
+                            className="px-2 py-0.5 bg-slate-900 border border-slate-800 text-[8.5px] font-black text-slate-300 rounded-md hover:text-white"
+                          >
+                            Preset 🏆
+                          </button>
+                          <button
+                            onClick={() => handlePresetBroadcast("⚠️ Mantenimiento cósmico inminente en 5 minutos")}
+                            className="px-2 py-0.5 bg-slate-900 border border-slate-800 text-[8.5px] font-black text-slate-300 rounded-md hover:text-white"
+                          >
+                            Preset ⚠️
+                          </button>
+                        </div>
+
+                        <button
+                          onClick={handleClearBroadcast}
+                          className="w-full mt-2.5 px-3 py-2 text-[10px] bg-red-950/40 hover:bg-red-900 border-2 border-black text-red-400 hover:text-white font-black uppercase rounded-xl shadow-[2px_2px_0px_#000] active:translate-y-0.5 transition-all cursor-pointer flex items-center justify-center gap-1"
+                        >
+                          Apagar Marquesina Activa
+                        </button>
                       </div>
                     </div>
                   )}

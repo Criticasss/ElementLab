@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import GameConceptCatalog from "./components/GameConceptCatalog";
 import PlayablePrototype from "./components/PlayablePrototype";
 import AICoDesigner from "./components/AICoDesigner";
@@ -27,6 +27,36 @@ export default function App() {
   const [showHowToPlay, setShowHowToPlay] = useState(true);
   const [activeAccount, setActiveAccount] = useState<Account | null>(null);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
+  const [globalBroadcast, setGlobalBroadcast] = useState<{
+    message: string;
+    author: string;
+    timestamp: number;
+  } | null>(() => {
+    try {
+      const saved = localStorage.getItem("alquimia_global_broadcast");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    const handleStorageChange = () => {
+      try {
+        const saved = localStorage.getItem("alquimia_global_broadcast");
+        setGlobalBroadcast(saved ? JSON.parse(saved) : null);
+      } catch {
+        // Safe play
+      }
+    };
+    window.addEventListener("storage", handleStorageChange);
+    // Also capture local state events dispatched within the same tab/process manually
+    window.addEventListener("local-broadcast-update", handleStorageChange);
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("local-broadcast-update", handleStorageChange);
+    };
+  }, []);
 
   const handleUnlockCard = (newCard: ElementSymbol) => {
     setCustomUnlockedCards((prev) => [...prev, newCard]);
@@ -122,7 +152,46 @@ export default function App() {
 
       {/* Main Container */}
       <div className="w-full max-w-7xl mx-auto px-4 md:px-6 py-8 flex-1 flex flex-col gap-8 relative z-10">
-        
+        <style dangerouslySetInnerHTML={{__html: `
+          @keyframes globalMarquee {
+            0% { transform: translateX(60%); }
+            100% { transform: translateX(-100%); }
+          }
+          .animate-global-marquee {
+            animation: globalMarquee 30s linear infinite;
+          }
+        `}} />
+
+        {/* Real-time Global Admin Broadcast Banner */}
+        {globalBroadcast && (
+          <div className="bg-red-650 border-4 border-black text-white px-4 py-3.5 rounded-[2rem] flex items-center justify-between gap-4 shadow-[6px_6px_0px_#000] overflow-hidden select-none font-mono">
+            <div className="flex items-center gap-1.5 shrink-0 font-black text-[10px] uppercase bg-black text-red-400 px-3 py-1 rounded-xl border-2 border-red-500/30 animate-pulse">
+              📢 COMUNICADO SUPREMO:
+            </div>
+            
+            <div className="flex-1 overflow-hidden relative h-5 flex items-center">
+              <div className="absolute whitespace-nowrap text-xs font-black uppercase tracking-wider flex items-center gap-16 animate-global-marquee">
+                <span>{globalBroadcast.message} — <span className="text-yellow-300">firmado por {globalBroadcast.author}</span></span>
+                <span className="text-red-400">•</span>
+                <span>{globalBroadcast.message} — <span className="text-yellow-300">firmado por {globalBroadcast.author}</span></span>
+                <span className="text-red-400">•</span>
+                <span>{globalBroadcast.message} — <span className="text-yellow-300">firmado por {globalBroadcast.author}</span></span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                playSound("click");
+                setGlobalBroadcast(null);
+              }}
+              className="p-1.5 rounded-xl bg-black/30 hover:bg-black/50 text-white border-2 border-black shrink-0 cursor-pointer active:translate-y-0.5"
+              title="Ocultar transmisión"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         {/* Navigation & Header */}
         <header className="flex flex-col lg:flex-row justify-between items-start lg:items-end pb-8 border-b-4 border-black gap-6">
           <div className="max-w-2xl">
