@@ -6,6 +6,13 @@ export interface Account {
   username: string;
   highscore: number;
   gamesPlayed: number;
+  etherGems?: number;
+  relics?: string[];
+  potions?: {
+    midas: number;
+    time: number;
+    chaos: number;
+  };
 }
 
 interface AccountManagerProps {
@@ -79,7 +86,10 @@ export default function AccountManager({ onAccountChange, activeAccount }: Accou
     const newAcc: Account = {
       username: cleanName,
       highscore: 0,
-      gamesPlayed: 0
+      gamesPlayed: 0,
+      etherGems: 0,
+      relics: [],
+      potions: { midas: 0, time: 0, chaos: 0 }
     };
 
     const updated = [...accounts, newAcc];
@@ -144,6 +154,9 @@ export default function AccountManager({ onAccountChange, activeAccount }: Accou
             <div className="bg-white text-black font-black uppercase tracking-wider text-xs px-4 py-2.5 rounded-2xl border-4 border-black shadow-[4px_4px_0px_#EC4899] flex items-center gap-2 select-none">
               <span className="text-base">🧙‍♂️</span>
               <span className="truncate max-w-[120px]">Activo: {activeAccount.username}</span>
+              <span className="text-[10px] bg-[#0EA5E9] text-white px-2 py-0.5 rounded-full border border-black flex items-center gap-1 shrink-0 ml-1 font-mono">
+                💎 {activeAccount.etherGems || 0} GE
+              </span>
               {activeAccount.highscore > 0 && (
                 <span className="text-[10px] bg-yellow-400 px-2 py-0.5 rounded-full border border-black flex items-center gap-1.5 shrink-0 ml-1">
                   <Trophy className="w-3 h-3 text-black fill-current" /> {activeAccount.highscore}
@@ -223,10 +236,15 @@ export default function AccountManager({ onAccountChange, activeAccount }: Accou
                       )}
                     </div>
 
-                    <div className="flex justify-between items-center mt-3 border-t border-black/15 pt-2">
-                      <span className={`text-[9px] font-mono flex items-center gap-1 ${isActive ? "text-yellow-200" : "text-amber-400"}`}>
-                        <Trophy className="w-3 h-3 fill-current" /> Récord: {acc.highscore}
-                      </span>
+                    <div className="flex justify-between items-center mt-3 border-t border-black/15 pt-2 flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[9px] font-mono flex items-center gap-1 ${isActive ? "text-yellow-200" : "text-amber-400"}`}>
+                          <Trophy className="w-3.5 h-3.5 fill-current" /> Récord: {acc.highscore}
+                        </span>
+                        <span className={`text-[9px] font-mono flex items-center gap-1 ${isActive ? "text-white/90" : "text-[#0ea5e9] font-extrabold"}`}>
+                          💎 {acc.etherGems || 0} GE
+                        </span>
+                      </div>
                       <button
                         onClick={(e) => handleDeleteAccount(acc.username, e)}
                         className={`p-1 rounded-lg border-2 border-black text-red-500 bg-white hover:bg-red-50 shadow-[1px_1px_0px_rgba(0,0,0,1)] active:translate-y-[1px] transition-all cursor-pointer opacity-90 group-hover:opacity-100`}

@@ -68,6 +68,29 @@ export default function App() {
     }
   };
 
+  const handleUpdateAccountData = (updatedFields: Partial<Account>) => {
+    if (!activeAccount) return;
+    const saved = localStorage.getItem("alquimia_viral_accounts");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved) as Account[];
+        const updated = parsed.map((acc) => {
+          if (acc.username === activeAccount.username) {
+            return {
+              ...acc,
+              ...updatedFields,
+            };
+          }
+          return acc;
+        });
+        localStorage.setItem("alquimia_viral_accounts", JSON.stringify(updated));
+        setActiveAccount((prev) => (prev ? { ...prev, ...updatedFields } : null));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  };
+
   const handleRecordGamePlay = () => {
     if (!activeAccount) return;
     const saved = localStorage.getItem("alquimia_viral_accounts");
@@ -222,6 +245,7 @@ export default function App() {
                   activeAccount={activeAccount}
                   onUpdateScore={handleUpdateHighScore}
                   onRecordGamePlay={handleRecordGamePlay}
+                  onUpdateAccountData={handleUpdateAccountData}
                 />
               )}
 

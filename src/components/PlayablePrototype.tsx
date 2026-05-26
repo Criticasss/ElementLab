@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { ElementSymbol, GameState, Rarity } from "../types";
 import { playSound } from "../utils/audio";
+import { Account } from "./AccountManager";
 import {
   RotateCcw,
   Sparkles,
@@ -14,7 +15,11 @@ import {
   Share2,
   Info,
   Layers,
-  Sparkle
+  Sparkle,
+  ShoppingBag,
+  Wand2,
+  Clock,
+  RotateCw
 } from "lucide-react";
 
 // Standard starter elements
@@ -42,16 +47,18 @@ const CARD_POOL: ElementSymbol[] = [
 
 interface PlayablePrototypeProps {
   customUnlockedCards: ElementSymbol[];
-  activeAccount: { username: string; highscore: number; gamesPlayed: number } | null;
+  activeAccount: Account | null;
   onUpdateScore: (finalScore: number) => void;
   onRecordGamePlay: () => void;
+  onUpdateAccountData: (updatedFields: Partial<Account>) => void;
 }
 
 export default function PlayablePrototype({
   customUnlockedCards,
   activeAccount,
   onUpdateScore,
-  onRecordGamePlay
+  onRecordGamePlay,
+  onUpdateAccountData
 }: PlayablePrototypeProps) {
   // Game values
   const [gold, setGold] = useState(0);
@@ -67,6 +74,183 @@ export default function PlayablePrototype({
   const [gameLog, setGameLog] = useState<string[]>(["¡Bienvenido a la Rejilla de Alquimia! Coloca elementos en el tablero para generar sinergias y oro."]);
   const [selectedHandIndex, setSelectedHandIndex] = useState<number | null>(null);
 
+  // Floating Effects Visual FX for Game Juice
+  const [floatingEffects, setFloatingEffects] = useState<{
+    id: string;
+    gridIndex: number;
+    text: string;
+    colorClass: string;
+  }[]>([]);
+
+  const triggerEffectsDirectly = (effects: { gridIndex: number; text: string; colorClass: string }[]) => {
+    const timestamp = Date.now();
+    const newEffects = effects.map((e, idx) => ({
+      id: `${timestamp}-${idx}-${Math.random()}`,
+      gridIndex: e.gridIndex,
+      text: e.text,
+      colorClass: e.colorClass
+    }));
+
+    setFloatingEffects(prev => [...prev, ...newEffects]);
+
+    // Clean up after 2000ms animation has processed
+    setTimeout(() => {
+      const idsToRemove = new Set(newEffects.map(ne => ne.id));
+      setFloatingEffects(prev => prev.filter(e => !idsToRemove.has(e.id)));
+    }, 2000);
+  };
+
+  // Screen selector
+  const [activeScreen, setActiveScreen] = useState<"board" | "shop">("board");
+
+  // Activate Potion: Midas
+  const usePotionMidas = () => {
+    if (!activeAccount) return;
+    const currentMidas = activeAccount.potions?.midas || 0;
+    if (currentMidas <= 0) {
+      playSound("fail");
+      addLog("❌ No tienes Pociones de Midas en tu inventario.");
+      return;
+    }
+
+    playSound("levelUp");
+    setGold(prev => prev + 40);
+    addLog("🧪 ¡POCIÓN DE MIDAS USADA! Generas instantáneamente +40 de Oro.");
+    
+    // Trigger floating effects on center cell
+    triggerEffectsDirectly([
+      { gridIndex: 4, text: "+40 💰", colorClass: "text-amber-300 font-extrabold text-lg animate-bounce animate-pulse" },
+      { gridIndex: 4, text: "👑 Midas", colorClass: "text-yellow-400 font-black italic" }
+    ]);
+
+    // Update account inventory
+    onUpdateAccountData({
+      potions: {
+        midas: currentMidas - 1,
+        time: activeAccount.potions?.time || 0,
+        chaos: activeAccount.potions?.chaos || 0
+      }
+    });
+  };
+
+  // Activate Potion: Tiempo
+  const usePotionTime = () => {
+    if (!activeAccount) return;
+    const currentTime = activeAccount.potions?.time || 0;
+    if (currentTime <= 0) {
+      playSound("fail");
+      addLog("❌ No tienes Pociones del Tiempo en tu inventario.");
+      return;
+    }
+
+    playSound("levelUp");
+    setTurnsLeft(prev => prev + 2);
+    addLog("🕰️ ¡POCIÓN DEL TIEMPO USADA! Se añaden +2 turnos de colocación.");
+    
+    triggerEffectsDirectly([
+      { gridIndex: 4, text: "+2 ⏳", colorClass: "text-emerald-400 font-extrabold text-lg" }
+    ]);
+
+    // Update account inventory
+    onUpdateAccountData({
+      potions: {
+        midas: activeAccount.potions?.midas || 0,
+        time: currentTime - 1,
+        chaos: activeAccount.potions?.chaos || 0
+      }
+    });
+  };
+
+  // Activate Potion: Chaos
+  const usePotionChaos = () => {
+    if (!activeAccount) return;
+    const currentChaos = activeAccount.potions?.chaos || 0;
+    if (currentChaos <= 0) {
+      playSound("fail");
+      addLog("❌ No tienes Pociones de Caos en tu inventario.");
+      return;
+    }
+
+    playSound("click");
+    // Redraw hand
+    const freshDeck = [...deck, ...hand].sort(() => Math.random() - 0.5);
+    const initialDraw = drawCard(freshDeck, []);
+    const secondDraw = drawCard(initialDraw.deck, initialDraw.hand);
+    const thirdDraw = drawCard(secondDraw.deck, secondDraw.hand);
+
+    setDeck(thirdDraw.deck);
+    setHand(thirdDraw.hand);
+    setSelectedHandIndex(null);
+
+    addLog("🌪️ ¡POCIÓN DE CAOS USADA! Tu mano entera ha sido transmutada robando desde tu mazo.");
+    triggerEffectsDirectly([
+      { gridIndex: 4, text: "🌪️ Caos", colorClass: "text-purple-400 font-black animate-pulse" }
+    ]);
+
+    // Update account inventory
+    onUpdateAccountData({
+      potions: {
+        midas: activeAccount.potions?.midas || 0,
+        time: activeAccount.potions?.time || 0,
+        chaos: currentChaos - 1
+      }
+    });
+  };
+
+  // Purchase items
+  const buyPotion = (type: "midas" | "time" | "chaos", cost: number) => {
+    if (!activeAccount) return;
+    const gems = activeAccount.etherGems || 0;
+    if (gems < cost) {
+      playSound("fail");
+      addLog("❌ Gemas de Éter insuficientes en tu balance.");
+      return;
+    }
+
+    playSound("levelUp");
+    const currentPotions = activeAccount.potions || { midas: 0, time: 0, chaos: 0 };
+    const updatedGems = gems - cost;
+    const updatedPotions = {
+      ...currentPotions,
+      [type]: (currentPotions[type] || 0) + 1
+    };
+
+    onUpdateAccountData({
+      etherGems: updatedGems,
+      potions: updatedPotions
+    });
+
+    addLog(`🛒 Compraste 1 Poción de ${type === "midas" ? "Midas" : type === "time" ? "Tiempo" : "Caos"} por ${cost} Gemas.`);
+  };
+
+  const buyRelic = (relicId: string, cost: number) => {
+    if (!activeAccount) return;
+    const gems = activeAccount.etherGems || 0;
+    if (gems < cost) {
+      playSound("fail");
+      addLog("❌ Gemas de Éter insuficientes para forjar la reliquia.");
+      return;
+    }
+
+    const currentRelics = activeAccount.relics || [];
+    if (currentRelics.includes(relicId)) {
+      playSound("fail");
+      addLog("❌ Ya posees esta reliquia alquímica sagrada en tu altar.");
+      return;
+    }
+
+    playSound("levelUp");
+    const updatedGems = gems - cost;
+    const updatedRelics = [...currentRelics, relicId];
+
+    onUpdateAccountData({
+      etherGems: updatedGems,
+      relics: updatedRelics
+    });
+
+    addLog(`💎 ¡FORJASTE LA RELIQUIA! Adquiriste ${relicId === "crisol" ? "Crisol Sagrado" : relicId === "espejo" ? "Espejo Astral" : "Sello del Infinito"} por ${cost} Gemas.`);
+  };
+
   // Drafting phase
   const [isDrafting, setIsDrafting] = useState(false);
   const [draftChoices, setDraftChoices] = useState<ElementSymbol[]>([]);
@@ -77,9 +261,10 @@ export default function PlayablePrototype({
     setGold(0);
     setQuota(30);
     setRound(1);
-    setTurnsLeft(6);
+    const initialTurns = activeAccount?.relics?.includes("sello") ? 7 : 6;
+    setTurnsLeft(initialTurns);
     setGrid(Array(9).fill(null));
-    setGameLog(["Partida iniciada. Cuota objetivo: 30 de oro. ¡Buena suerte!"]);
+    setGameLog([`Partida iniciada. Cuota objetivo: 30 de oro. ¡Tienes e inicias con ${initialTurns} turnos de colocación! ¡Buena suerte!`]);
     setIsGameOver(false);
     setIsVictory(false);
     setIsDrafting(false);
@@ -129,6 +314,7 @@ export default function PlayablePrototype({
     let newGrid = [...currentGrid];
     let goldAwarded = 0;
     let mergersHappened = false;
+    const effectsList: { gridIndex: number; text: string; colorClass: string }[] = [];
 
     // We do combinations!
     // Water (💧) + Seed (🌱) = Flower (🌸, baseValue 4)
@@ -181,6 +367,8 @@ export default function PlayablePrototype({
           goldAwarded += 10; // Merger bonus
           mergersHappened = true;
           addLog("✨ ¡FUSIÓN! Agua + Semilla crearon una Flor Silvestre (+10 Oro)");
+          effectsList.push({ gridIndex: i, text: "+10 💰", colorClass: "text-yellow-400 font-extrabold" });
+          effectsList.push({ gridIndex: i, text: "🌸 Fusión", colorClass: "text-pink-400 font-black italic animate-bounce" });
           break;
         }
 
@@ -203,6 +391,8 @@ export default function PlayablePrototype({
           goldAwarded += 25;
           mergersHappened = true;
           addLog("✨ ¡GRAN FUSIÓN! Flor + Sol crearon la sabia Flor de Oro (+25 Oro)");
+          effectsList.push({ gridIndex: i, text: "+25 💰", colorClass: "text-yellow-400 font-extrabold" });
+          effectsList.push({ gridIndex: i, text: "⚜️ Magna Fusión", colorClass: "text-amber-400 font-black italic animate-bounce" });
           break;
         }
 
@@ -225,6 +415,8 @@ export default function PlayablePrototype({
           goldAwarded += 5;
           mergersHappened = true;
           addLog("✨ ¡FUSIÓN! Fuego + Tierra cementaron una Piedra resistente (+5 Oro)");
+          effectsList.push({ gridIndex: i, text: "+5 💰", colorClass: "text-yellow-400 font-extrabold" });
+          effectsList.push({ gridIndex: i, text: "🪨 Piedra", colorClass: "text-zinc-400 font-black italic" });
           break;
         }
 
@@ -247,6 +439,8 @@ export default function PlayablePrototype({
           goldAwarded += 7;
           mergersHappened = true;
           addLog("✨ ¡FUSIÓN! Agua + Tierra moldearon Arcilla Alquímica (+7 Oro)");
+          effectsList.push({ gridIndex: i, text: "+7 💰", colorClass: "text-yellow-400 font-extrabold" });
+          effectsList.push({ gridIndex: i, text: "🏺 Arcilla", colorClass: "text-orange-400 font-black italic" });
           break;
         }
       }
@@ -271,6 +465,8 @@ export default function PlayablePrototype({
           goldAwarded += nearbyFlowers * 6;
           addLog(`🐝 Abeja adyacente a ${nearbyFlowers} flores recolectó néctar (+${nearbyFlowers * 6} Oro)`);
           mergersHappened = true;
+          effectsList.push({ gridIndex: i, text: `+${nearbyFlowers * 6} 💰`, colorClass: "text-yellow-400 font-extrabold" });
+          effectsList.push({ gridIndex: i, text: "🐝 Néctar", colorClass: "text-amber-300 font-black" });
         }
       }
 
@@ -290,6 +486,8 @@ export default function PlayablePrototype({
             goldAwarded += 15;
             mergersHappened = true;
             addLog("🌋 ¡VOLCÁN! Derritió Piedra en hermosa Obsidiana Cristalizada (+15 Oro y +15 base)");
+            effectsList.push({ gridIndex: adjIdx, text: "+15 💰", colorClass: "text-yellow-400 font-extrabold" });
+            effectsList.push({ gridIndex: adjIdx, text: "💎 Obsidiana", colorClass: "text-cyan-400 font-black italic" });
           }
         });
       }
@@ -302,11 +500,16 @@ export default function PlayablePrototype({
           if (neighbor && neighbor.symbol !== "🧙") {
             goldAwarded += neighbor.baseValue; // double its production
             doubles++;
+            if (neighbor.baseValue > 0) {
+              effectsList.push({ gridIndex: adjIdx, text: `+${neighbor.baseValue} 💰`, colorClass: "text-yellow-400 font-extrabold" });
+              effectsList.push({ gridIndex: adjIdx, text: "x2 ✨", colorClass: "text-purple-400 font-black" });
+            }
           }
         });
         if (doubles > 0) {
           addLog(`🧙 Alquimista canalizó magias para duplicar producción de ${doubles} vecinos.`);
           mergersHappened = true;
+          effectsList.push({ gridIndex: i, text: "🧙 Magia x2", colorClass: "text-fuchsia-400 font-bold" });
         }
       }
 
@@ -321,15 +524,23 @@ export default function PlayablePrototype({
           goldAwarded += 8;
           addLog("🌻 Girasol brilla intensamente enfocado por el Sol (+8 Oro)");
           mergersHappened = true;
+          effectsList.push({ gridIndex: i, text: "+8 💰", colorClass: "text-yellow-400 font-extrabold" });
+          effectsList.push({ gridIndex: i, text: "🌻 Fotosíntesis", colorClass: "text-yellow-300 font-bold animate-pulse" });
         }
       }
     }
 
     if (mergersHappened) {
       playSound("merge");
+      if (activeAccount?.relics?.includes("crisol")) {
+        goldAwarded += 4;
+        addLog("🏺 ¡CRISOL SAGRADO! La reacción catalizó +4 de oro de reliquia.");
+        const firstFilledIdx = newGrid.findIndex(cell => cell !== null);
+        effectsList.push({ gridIndex: firstFilledIdx !== -1 ? firstFilledIdx : 4, text: "+4 🏺", colorClass: "text-amber-400 font-bold" });
+      }
     }
 
-    return { updatedGrid: newGrid, bonusGold: goldAwarded };
+    return { updatedGrid: newGrid, bonusGold: goldAwarded, effects: effectsList };
   };
 
   const selectHandCard = (index: number) => {
@@ -353,6 +564,8 @@ export default function PlayablePrototype({
     let newGrid = [...grid];
     newGrid[gridIndex] = selectedCard;
 
+    const rainEffects: { gridIndex: number; text: string; colorClass: string }[] = [];
+
     // Special instant placement trigger: Lluvia Fuerte (🌧️)
     if (selectedCard.symbol === "🌧️") {
       addLog("🌧️ Tormenta de lluvia nutre el campo...");
@@ -367,6 +580,7 @@ export default function PlayablePrototype({
             description: "Nutrida por la tormenta."
           };
           addLog("🌧️ Semilla irrigada creció a Flor Silvestre.");
+          rainEffects.push({ gridIndex: i, text: "🌸 Regado", colorClass: "text-pink-400 font-extrabold animate-pulse" });
         }
       }
     }
@@ -375,6 +589,7 @@ export default function PlayablePrototype({
     if (selectedCard.symbol === "💨") {
       // Cleans grid a bit? Or just plays.
       addLog("💨 Nube sopla el tablero, despejando malas energías...");
+      rainEffects.push({ gridIndex: gridIndex, text: "💨 Limpieza", colorClass: "text-sky-300 font-extrabold" });
     }
 
     // Remove from hand and draw new one
@@ -387,8 +602,21 @@ export default function PlayablePrototype({
     let turnGold = selectedCard.baseValue;
     
     // Evaluate chain synergies and mergers
-    const { updatedGrid, bonusGold } = evaluateGridTransformations(newGrid);
+    const { updatedGrid, bonusGold, effects } = evaluateGridTransformations(newGrid);
     turnGold += bonusGold;
+
+    // Trigger floating effects visual pipeline
+    const finalTurnEffects = [...rainEffects, ...effects];
+    if (selectedCard.baseValue > 0) {
+      finalTurnEffects.push({
+        gridIndex: gridIndex,
+        text: `+${selectedCard.baseValue} 💰`,
+        colorClass: "text-[#10B981] font-black"
+      });
+    }
+    if (finalTurnEffects.length > 0) {
+      triggerEffectsDirectly(finalTurnEffects);
+    }
 
     // Award gold
     setGold((prev) => prev + turnGold);
@@ -410,19 +638,37 @@ export default function PlayablePrototype({
   const handleRoundFinish = (finalGrid: (ElementSymbol | null)[]) => {
     // 1. Calculate static turn-over bonuses for gold
     let extraHarvest = 0;
-    finalGrid.forEach((card) => {
+    const roundHarvestEffects: { gridIndex: number; text: string; colorClass: string }[] = [];
+    finalGrid.forEach((card, idx) => {
       if (card) {
         extraHarvest += card.baseValue;
+        if (card.baseValue > 0) {
+          roundHarvestEffects.push({
+            gridIndex: idx,
+            text: `+${card.baseValue} 💰`,
+            colorClass: "text-yellow-400 font-extrabold font-mono"
+          });
+        }
       }
     });
+
+    if (roundHarvestEffects.length > 0) {
+      // Trigger harvesting gold effects
+      triggerEffectsDirectly(roundHarvestEffects);
+    }
 
     // Gold magi checks (e.g. Mago de oro desvanecimiento)
     let cleanedGrid = [...finalGrid];
     let magiciansLeaving = 0;
+    const hasAstralMirror = activeAccount?.relics?.includes("espejo");
 
     for (let i = 0; i < 9; i++) {
       const card = cleanedGrid[i];
       if (card && card.name === "Mago de Oro") {
+        if (hasAstralMirror) {
+          // stabilized by relic
+          continue;
+        }
         if (Math.random() < 0.15) {
           cleanedGrid[i] = null;
           magiciansLeaving++;
@@ -443,7 +689,16 @@ export default function PlayablePrototype({
     if (roundFinalGold >= quota) {
       // Quota paid! Play victory sound
       playSound("quota");
+      
+      const gemsEarned = 10 + (round * 5);
       addLog(`👑 ¡PAGASTE LA CUOTA! Logrado: ${roundFinalGold}/${quota}.`);
+      addLog(`💎 ¡GANASTE +${gemsEarned} GEMAS DE ÉTER por superar la Fase ${round}!`);
+      
+      if (activeAccount) {
+        onUpdateAccountData({
+          etherGems: (activeAccount.etherGems || 0) + gemsEarned
+        });
+      }
       
       // Start card draft selection phase
       triggerDraftingPhase();
@@ -489,7 +744,8 @@ export default function PlayablePrototype({
     // Reset board variables for next round
     setRound(nextRound);
     setQuota(nextQuota);
-    setTurnsLeft(6);
+    const initialTurns = activeAccount?.relics?.includes("sello") ? 7 : 6;
+    setTurnsLeft(initialTurns);
     setIsDrafting(false);
     setGrid(Array(9).fill(null)); // Clear layout for fresh placement puzzle
 
@@ -500,7 +756,7 @@ export default function PlayablePrototype({
     
     setDeck(thirdDraw.deck);
     setHand(thirdDraw.hand);
-    addLog(`Ronda ${nextRound} iniciada. Nueva cuota objetivo: ${nextQuota} oro. ¡Tienes 6 turnos!`);
+    addLog(`Ronda ${nextRound} iniciada. Nueva cuota objetivo: ${nextQuota} oro. ¡Tienes ${initialTurns} turnos!`);
   };
 
   // Skip drafting or manual trash
@@ -517,7 +773,8 @@ export default function PlayablePrototype({
 
     setRound(nextRound);
     setQuota(nextQuota);
-    setTurnsLeft(6);
+    const initialTurns = activeAccount?.relics?.includes("sello") ? 7 : 6;
+    setTurnsLeft(initialTurns);
     setGrid(Array(9).fill(null));
 
     // Refill hand
@@ -526,12 +783,38 @@ export default function PlayablePrototype({
     const thirdDraw = drawCard(secondDraw.deck, secondDraw.hand);
     setDeck(thirdDraw.deck);
     setHand(thirdDraw.hand);
+    addLog(`Ronda ${nextRound} iniciada. Nueva cuota objetivo: ${nextQuota} oro. ¡Tienes ${initialTurns} turnos!`);
   };
 
   return (
     <div id="playable-prototype" className="flex flex-col gap-8">
+      {/* Custom float keyframes for Game Juice Visual FX */}
+      <style>{`
+        @keyframes float-up-fade {
+          0% {
+            transform: translateY(15px) scale(0.8);
+            opacity: 0;
+          }
+          15% {
+            transform: translateY(0px) scale(1.15);
+            opacity: 1;
+          }
+          85% {
+            transform: translateY(-28px) scale(1);
+            opacity: 1;
+          }
+          100% {
+            transform: translateY(-48px) scale(0.8);
+            opacity: 0;
+          }
+        }
+        .animate-float-up-fade {
+          animation: float-up-fade 1.6s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+        }
+      `}</style>
+
       {/* Upper Status Line */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-[#111827]/80 border-4 border-black p-5 rounded-[2rem] shadow-[6px_6px_0px_rgba(0,0,0,0.5)] select-none">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 bg-[#111827]/80 border-4 border-black p-5 rounded-[2rem] shadow-[6px_6px_0px_rgba(0,0,0,0.5)] select-none">
         <div className="flex items-center gap-3 px-2">
           <div className="w-10 h-10 rounded-xl bg-white text-black flex items-center justify-center border-4 border-black shadow-[2px_2px_0px_#000] shrink-0 font-black">
             💰
@@ -573,9 +856,46 @@ export default function PlayablePrototype({
             <div className="text-2xl font-black font-mono text-white leading-tight">{turnsLeft}</div>
           </div>
         </div>
+
+        <div className="flex items-center gap-3 px-2 col-span-2 lg:col-span-1 border-t-2 border-dashed border-slate-800 lg:border-t-0 lg:border-l-2 lg:pl-4">
+          <div className="w-10 h-10 rounded-xl bg-[#0ea5e9]/10 text-[#0ea5e9] flex items-center justify-center border-4 border-black shadow-[2px_2px_0px_#000] shrink-0 font-black text-lg">
+            💎
+          </div>
+          <div>
+            <div className="text-[10px] uppercase font-black tracking-widest text-[#0ea5e9] font-mono">Éter Balance</div>
+            <div className="text-2xl font-black font-mono text-yellow-300 leading-tight">
+              {activeAccount?.etherGems || 0} <span className="text-[10px] text-gray-400">GE</span>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      {/* Screen selector tabs */}
+      <div className="flex border-4 border-black bg-slate-900 rounded-2xl p-1.5 gap-2 font-mono text-xs select-none">
+        <button
+          onClick={() => { playSound("click"); setActiveScreen("board"); }}
+          className={`flex-1 py-3 px-4 rounded-xl font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer ${
+            activeScreen === "board"
+              ? "bg-[#0ea5e9] text-white border-2 border-black shadow-[3px_3px_0px_rgba(0,0,0,1)] scale-[1.01]"
+              : "text-gray-400 hover:text-white"
+          }`}
+        >
+          🔮 Rejilla de Destilación
+        </button>
+        <button
+          onClick={() => { playSound("click"); setActiveScreen("shop"); }}
+          className={`flex-1 py-3 px-4 rounded-xl font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer ${
+            activeScreen === "shop"
+              ? "bg-[#10B981] text-white border-2 border-black shadow-[3px_3px_0px_rgba(0,0,0,1)] scale-[1.01]"
+              : "text-gray-400 hover:text-white"
+          }`}
+        >
+          🛒 Bazar de Éter y Reliquias
+        </button>
+      </div>
+
+      {activeScreen === "board" && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Play board GRID (3x3) */}
         <div className="lg:col-span-6 flex flex-col items-center justify-center bg-[#111827] p-6 rounded-[2.5rem] border-4 border-black relative shadow-[10px_10px_0px_rgba(0,0,0,0.5)]">
           <div className="mb-4 flex justify-between w-full items-center px-1">
@@ -613,6 +933,24 @@ export default function PlayablePrototype({
                       : `${cardBgClass} border-black shadow-[4px_4px_0px_rgba(0,0,0,1)] hover:scale-105 hover:shadow-[6px_6px_0px_rgba(0,0,0,1)] active:translate-y-1 transition-transform`
                   }`}
                 >
+                  {/* Floating numbers visual effects overlay */}
+                  <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center overflow-visible z-30">
+                    {floatingEffects
+                      .filter((e) => e.gridIndex === idx)
+                      .map((e, fxIdx) => (
+                        <span
+                          key={e.id}
+                          className={`absolute font-black tracking-tight drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] select-none text-sm md:text-base animate-float-up-fade ${e.colorClass}`}
+                          style={{
+                            animationDelay: `${fxIdx * 0.15}s`,
+                            marginTop: `${fxIdx * -12}px`
+                          }}
+                        >
+                          {e.text}
+                        </span>
+                      ))}
+                  </div>
+
                   {/* Position label for visual help */}
                   <span className={`absolute top-1 right-1 text-[8px] font-black font-mono ${isEmpty ? "text-gray-600 opacity-60" : "text-black/45"}`}>
                     S{idx + 1}
@@ -801,6 +1139,227 @@ export default function PlayablePrototype({
           </div>
         </div>
       </div>
+      )}
+
+      {activeScreen === "shop" && (
+        <div className="bg-[#1f2937] border-4 border-black p-6 sm:p-8 rounded-[2.5rem] shadow-[12px_12px_0px_rgba(0,0,0,0.35)] relative overflow-hidden select-none">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b-4 border-black pb-4 mb-6">
+            <div>
+              <h3 className="text-xl font-black text-white uppercase tracking-wider flex items-center gap-2 font-mono">
+                <ShoppingBag className="w-5 h-5 text-emerald-400" /> Gran Bazar de Éter y Reliquias
+              </h3>
+              <p className="text-xs text-slate-400 font-semibold mt-0.5">
+                Utiliza tus Gemas de Éter acumuladas al superar fases para forjar amuletos pasivos o preparar pociones.
+              </p>
+            </div>
+            
+            <div className="bg-[#0EA5E9] border-4 border-black px-4 py-2 rounded-2xl flex items-center gap-2 shadow-[3px_3px_0px_#000] shrink-0 font-mono text-xs font-black text-white">
+              <span>SALDO DISPONIBLE:</span>
+              <span className="text-sm bg-black px-2 py-0.5 rounded-lg border border-white/10 text-yellow-300">
+                💎 {activeAccount?.etherGems || 0} GE
+              </span>
+            </div>
+          </div>
+
+          {!activeAccount ? (
+            <div className="text-center py-12 bg-[#111827] border-4 border-black rounded-3xl p-6">
+              <span className="text-4xl">🧙‍♂️</span>
+              <h4 className="font-mono text-sm font-black text-yellow-500 uppercase mt-2">Crea una Cuenta para Usar la Tienda</h4>
+              <p className="text-xs text-gray-400 max-w-sm mx-auto mt-1 font-semibold leading-relaxed">
+                Necesitas un perfil de Alquimista activo para registrar monedas de éter y guardar tus reliquias forjadas permanentemente.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* Consumible potions section */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-mono font-black text-amber-400 uppercase tracking-widest border-b-2 border-black pb-1.5 flex items-center gap-1.5">
+                  🧪 Elixires y Consumibles
+                </h4>
+                
+                <div className="space-y-3">
+                  {/* Potion Card: Midas */}
+                  <div className="bg-[#111827] p-4 rounded-2xl border-4 border-black shadow-[4px_4px_0px_#000] flex justify-between items-center gap-4 hover:border-amber-400/50 transition-colors">
+                    <div className="flex items-start gap-2.5">
+                      <span className="text-2xl bg-slate-800 p-2.5 rounded-xl border-2 border-black shrink-0">🧪</span>
+                      <div>
+                        <h5 className="text-xs font-black text-white uppercase tracking-wider">Poción de Midas</h5>
+                        <p className="text-[10px] text-gray-400 font-semibold leading-normal mt-0.5 max-w-[180px]">
+                          Añade inmediatamente <span className="text-yellow-400 font-bold">+40 de oro</span> pasivo a tu contador de ronda.
+                        </p>
+                        <div className="text-[9px] font-mono text-[#0ea5e9] mt-1 font-black">
+                          Tienes: {activeAccount.potions?.midas || 0} un.
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <button
+                      onClick={() => buyPotion("midas", 15)}
+                      className="px-3.5 py-2 bg-[#10B981] hover:bg-emerald-600 font-black text-white rounded-xl border-2 border-black shadow-[2px_2px_0px_#000] text-[10px] uppercase font-mono tracking-wider active:translate-y-0.5 cursor-pointer shrink-0"
+                    >
+                      💎 15 GE
+                    </button>
+                  </div>
+
+                  {/* Potion Card: Time */}
+                  <div className="bg-[#111827] p-4 rounded-2xl border-4 border-black shadow-[4px_4px_0px_#000] flex justify-between items-center gap-4 hover:border-emerald-400/50 transition-colors">
+                    <div className="flex items-start gap-2.5">
+                      <span className="text-2xl bg-slate-800 p-2.5 rounded-xl border-2 border-black shrink-0">🕰️</span>
+                      <div>
+                        <h5 className="text-xs font-black text-white uppercase tracking-wider">Filtro del Tiempo</h5>
+                        <p className="text-[10px] text-gray-400 font-semibold leading-normal mt-0.5 max-w-[180px]">
+                          Añade <span className="text-emerald-400 font-bold">+2 turnos</span> extras a la fase de colocación activa.
+                        </p>
+                        <div className="text-[9px] font-mono text-[#0ea5e9] mt-1 font-black">
+                          Tienes: {activeAccount.potions?.time || 0} un.
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <button
+                      onClick={() => buyPotion("time", 20)}
+                      className="px-3.5 py-2 bg-[#10B981] hover:bg-emerald-600 font-black text-white rounded-xl border-2 border-black shadow-[2px_2px_0px_#000] text-[10px] uppercase font-mono tracking-wider active:translate-y-0.5 cursor-pointer shrink-0"
+                    >
+                      💎 20 GE
+                    </button>
+                  </div>
+
+                  {/* Potion Card: Chaos */}
+                  <div className="bg-[#111827] p-4 rounded-2xl border-4 border-black shadow-[4px_4px_0px_#000] flex justify-between items-center gap-4 hover:border-purple-400/50 transition-colors">
+                    <div className="flex items-start gap-2.5">
+                      <span className="text-2xl bg-slate-800 p-2.5 rounded-xl border-2 border-black shrink-0">🌪️</span>
+                      <div>
+                        <h5 className="text-xs font-black text-white uppercase tracking-wider">Elíxir de Inestabilidad</h5>
+                        <p className="text-[10px] text-gray-400 font-semibold leading-normal mt-0.5 max-w-[180px]">
+                          Descarta tu mano al completo y <span className="text-purple-400 font-bold">roba 3 elementos</span> desde tu mazo.
+                        </p>
+                        <div className="text-[9px] font-mono text-[#0ea5e9] mt-1 font-black">
+                          Tienes: {activeAccount.potions?.chaos || 0} un.
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <button
+                      onClick={() => buyPotion("chaos", 10)}
+                      className="px-3.5 py-2 bg-[#10B981] hover:bg-emerald-600 font-black text-white rounded-xl border-2 border-black shadow-[2px_2px_0px_#000] text-[10px] uppercase font-mono tracking-wider active:translate-y-0.5 cursor-pointer shrink-0"
+                    >
+                      💎 10 GE
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Permanent relics section */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-mono font-black text-pink-500 uppercase tracking-widest border-b-2 border-black pb-1.5 flex items-center gap-1.5">
+                  🏆 Amuletos y Reliquias Pasivas
+                </h4>
+
+                <div className="space-y-3">
+                  {/* Relic Card: Crisol */}
+                  {(() => {
+                    const owned = activeAccount.relics?.includes("crisol");
+                    return (
+                      <div className="bg-[#111827] p-4 rounded-2xl border-4 border-black shadow-[4px_4px_0px_#000] flex justify-between items-center gap-4 hover:border-pink-500/50 transition-colors">
+                        <div className="flex items-start gap-2.5">
+                          <span className="text-2xl bg-slate-800 p-2.5 rounded-xl border-2 border-black shrink-0">🏺</span>
+                          <div>
+                            <h5 className="text-xs font-black text-white uppercase tracking-wider">Crisol Sagrado</h5>
+                            <p className="text-[10px] text-gray-400 font-semibold leading-normal mt-0.5 max-w-[180px]">
+                              Toda fusión o sinergia en la rejilla genera <span className="text-amber-300 font-bold">+4 de oro extra</span> de forma permanente.
+                            </p>
+                            <span className={`text-[8.5px] font-mono font-black uppercase tracking-wider mt-1 px-2 py-0.5 rounded-full inline-block ${owned ? "bg-[#10B981] text-white" : "bg-slate-800 text-gray-400"}`}>
+                              {owned ? "Activo" : "Inactivo"}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        <button
+                          onClick={() => buyRelic("crisol", 60)}
+                          disabled={owned}
+                          className={`px-3 py-2.5 font-black rounded-xl border-2 border-black text-[10px] uppercase font-mono tracking-wider transition-all select-none shrink-0 ${
+                            owned
+                              ? "bg-slate-700 text-gray-400 cursor-not-allowed shadow-none"
+                              : "bg-[#10B981] hover:bg-emerald-600 text-white shadow-[2px_2px_0px_#000] active:translate-y-0.5 cursor-pointer"
+                          }`}
+                        >
+                          {owned ? "Forjado" : "💎 60 GE"}
+                        </button>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Relic Card: Espejo */}
+                  {(() => {
+                    const owned = activeAccount.relics?.includes("espejo");
+                    return (
+                      <div className="bg-[#111827] p-4 rounded-2xl border-4 border-black shadow-[4px_4px_0px_#000] flex justify-between items-center gap-4 hover:border-pink-500/50 transition-colors">
+                        <div className="flex items-start gap-2.5">
+                          <span className="text-2xl bg-slate-800 p-2.5 rounded-xl border-2 border-black shrink-0">🪞</span>
+                          <div>
+                            <h5 className="text-xs font-black text-white uppercase tracking-wider">Espejo Astral</h5>
+                            <p className="text-[10px] text-gray-400 font-semibold leading-normal mt-0.5 max-w-[180px]">
+                              Los cotizados <span className="text-yellow-400">Magos de Oro (🧙‍♂️)</span> son estables y ya <span className="text-[#EC4899] font-bold">no mueren</span> al finalizar turnos.
+                            </p>
+                            <span className={`text-[8.5px] font-mono font-black uppercase tracking-wider mt-1 px-2 py-0.5 rounded-full inline-block ${owned ? "bg-[#10B981] text-white" : "bg-slate-800 text-gray-400"}`}>
+                              {owned ? "Activo" : "Inactivo"}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        <button
+                          onClick={() => buyRelic("espejo", 100)}
+                          disabled={owned}
+                          className={`px-3 py-2.5 font-black rounded-xl border-2 border-black text-[10px] uppercase font-mono tracking-wider transition-all select-none shrink-0 ${
+                            owned
+                              ? "bg-slate-700 text-gray-400 cursor-not-allowed shadow-none"
+                              : "bg-[#10B981] hover:bg-emerald-600 text-white shadow-[2px_2px_0px_#000] active:translate-y-0.5 cursor-pointer"
+                          }`}
+                        >
+                          {owned ? "Forjado" : "💎 100 GE"}
+                        </button>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Relic Card: Sello */}
+                  {(() => {
+                    const owned = activeAccount.relics?.includes("sello");
+                    return (
+                      <div className="bg-[#111827] p-4 rounded-2xl border-4 border-black shadow-[4px_4px_0px_#000] flex justify-between items-center gap-4 hover:border-pink-500/50 transition-colors">
+                        <div className="flex items-start gap-2.5">
+                          <span className="text-2xl bg-slate-800 p-2.5 rounded-xl border-2 border-black shrink-0">♾️</span>
+                          <div>
+                            <h5 className="text-xs font-black text-white uppercase tracking-wider">Sello del Infinito</h5>
+                            <p className="text-[10px] text-gray-400 font-semibold leading-normal mt-0.5 max-w-[180px]">
+                              Inicias cada ronda con <span className="text-emerald-400 font-bold">+1 turno extra de colocación</span> (7 turnos en total).
+                            </p>
+                            <span className={`text-[8.5px] font-mono font-black uppercase tracking-wider mt-1 px-2 py-0.5 rounded-full inline-block ${owned ? "bg-[#10B981] text-[#fff]" : "bg-slate-800 text-gray-400"}`}>
+                              {owned ? "Activo" : "Inactivo"}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        <button
+                          onClick={() => buyRelic("sello", 140)}
+                          disabled={owned}
+                          className={`px-3 py-2.5 font-black rounded-xl border-2 border-black text-[10px] uppercase font-mono tracking-wider transition-all select-none shrink-0 ${
+                            owned
+                              ? "bg-slate-700 text-gray-400 cursor-not-allowed shadow-none"
+                              : "bg-[#10B981] hover:bg-emerald-600 text-white shadow-[2px_2px_0px_#000] active:translate-y-0.5 cursor-pointer"
+                          }`}
+                        >
+                          {owned ? "Forjado" : "💎 140 GE"}
+                        </button>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
