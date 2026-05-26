@@ -3,6 +3,7 @@ import GameConceptCatalog from "./components/GameConceptCatalog";
 import PlayablePrototype from "./components/PlayablePrototype";
 import AICoDesigner from "./components/AICoDesigner";
 import AccountManager, { Account } from "./components/AccountManager";
+import AdminPanel from "./components/AdminPanel";
 import { ElementSymbol } from "./types";
 import { toggleSound, playSound } from "./utils/audio";
 import {
@@ -15,7 +16,8 @@ import {
   BookOpen,
   X,
   Terminal,
-  Play
+  Play,
+  ShieldAlert
 } from "lucide-react";
 
 export default function App() {
@@ -24,6 +26,7 @@ export default function App() {
   const [isSoundOn, setIsSoundOn] = useState(true);
   const [showHowToPlay, setShowHowToPlay] = useState(true);
   const [activeAccount, setActiveAccount] = useState<Account | null>(null);
+  const [isAdminOpen, setIsAdminOpen] = useState(false);
 
   const handleUnlockCard = (newCard: ElementSymbol) => {
     setCustomUnlockedCards((prev) => [...prev, newCard]);
@@ -136,6 +139,17 @@ export default function App() {
             <div className="bg-white px-5 py-2.5 rounded-full text-black font-black text-[11px] sm:text-xs tracking-widest uppercase border-4 border-black shadow-[4px_4px_0px_#EC4899] select-none">
               LABORATORIO ABIERTO 🧪
             </div>
+
+            {/* Admin Keypad Trigger Button */}
+            <button
+              onClick={() => {
+                playSound("click");
+                setIsAdminOpen(true);
+              }}
+              className="px-4 py-2 bg-[#4F46E5] hover:bg-indigo-700 border-4 border-black rounded-2xl text-xs font-black text-white tracking-widest uppercase shadow-[4px_4px_0px_rgba(0,0,0,1)] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_rgba(0,0,0,1)] active:translate-y-[4px] active:shadow-[0px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
+            >
+              <ShieldAlert className="w-4 h-4 shrink-0 text-white animate-pulse" /> ADMIN
+            </button>
 
             {/* Guide Button */}
             <button
@@ -278,6 +292,14 @@ export default function App() {
         )}
 
       </div>
+
+      {/* Admin Control Center Modal */}
+      <AdminPanel
+        isOpen={isAdminOpen}
+        onClose={() => setIsAdminOpen(false)}
+        activeAccount={activeAccount}
+        onUpdateAccountData={handleUpdateAccountData}
+      />
 
       {/* Footer */}
       <footer className="w-full border-t border-slate-900/60 bg-slate-950/40 py-4 font-mono text-[10px] text-gray-400 text-center relative z-10 select-none pb-6">
