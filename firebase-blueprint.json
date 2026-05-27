@@ -1,0 +1,49 @@
+{
+  "entities": {
+    "broadcast": {
+      "title": "Broadcast Message",
+      "description": "A real-time administrative announcement or marquee message shown to all users",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "message": { "type": "string" },
+        "author": { "type": "string" },
+        "timestamp": { "type": "integer" }
+      },
+      "required": ["message", "author", "timestamp"]
+    },
+    "account": {
+      "title": "Alchemist Account",
+      "description": "User alchemist account details featuring score, gems, custom relics, purchased potions, and account login password",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "password": { "type": "string" },
+        "highscore": { "type": "integer" },
+        "gamesPlayed": { "type": "integer" },
+        "etherGems": { "type": "integer" },
+        "tutorialCompleted": { "type": "boolean" },
+        "relics": { "type": "array", "items": { "type": "string" } },
+        "potions": {
+          "type": "object",
+          "properties": {
+            "midas": { "type": "integer" },
+            "time": { "type": "integer" },
+            "chaos": { "type": "integer" }
+          }
+        }
+      },
+      "required": ["username", "password", "highscore", "gamesPlayed"]
+    }
+  },
+  "firestore": {
+    "/broadcasts/{broadcastId}": {
+      "schema": "broadcast",
+      "description": "The broadcast documents of the application used for real-time announcements."
+    },
+    "/accounts/{username}": {
+      "schema": "account",
+      "description": "Alchemist character account profiles."
+    }
+  }
+}

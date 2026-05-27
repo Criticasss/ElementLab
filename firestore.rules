@@ -1,0 +1,46 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidUsernameId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 30;
+    }
+
+    function isValidBroadcast(data) {
+      return data.keys().hasAll(['message', 'author', 'timestamp'])
+        && data.keys().size() == 3
+        && data.message is string && data.message.size() <= 300
+        && data.author is string && data.author.size() <= 100
+        && data.timestamp is int;
+    }
+
+    function isValidAccount(data) {
+      return data.keys().hasAll(['username', 'password', 'highscore', 'gamesPlayed'])
+        && data.username is string && data.username.size() <= 30
+        && data.password is string && data.password.size() <= 100
+        && data.highscore is int
+        && data.gamesPlayed is int
+        && (!data.keys().hasAny(['tutorialCompleted']) || data.tutorialCompleted is bool);
+    }
+
+    match /broadcasts/{broadcastId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(broadcastId) && isValidBroadcast(request.resource.data);
+      allow delete: if isValidId(broadcastId);
+    }
+
+    match /accounts/{username} {
+      allow get, list: if true;
+      allow create, update: if isValidUsernameId(username) && isValidAccount(request.resource.data);
+      allow delete: if isValidUsernameId(username);
+    }
+  }
+}

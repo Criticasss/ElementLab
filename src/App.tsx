@@ -1,8 +1,11 @@
 import { useState, useEffect } from "react";
+import { doc, onSnapshot, updateDoc } from "firebase/firestore";
+import { db, handleFirestoreError, OperationType } from "./firebase";
 import GameConceptCatalog from "./components/GameConceptCatalog";
 import PlayablePrototype from "./components/PlayablePrototype";
 import AICoDesigner from "./components/AICoDesigner";
 import AccountManager, { Account } from "./components/AccountManager";
+import TutorialOverlay from "./components/TutorialOverlay";
 import AdminPanel from "./components/AdminPanel";
 import { ElementSymbol } from "./types";
 import { toggleSound, playSound } from "./utils/audio";
@@ -39,23 +42,32 @@ export default function App() {
     message: string;
     author: string;
     timestamp: number;
-  } | null>(() => {
-    try {
-      const saved = localStorage.getItem("alquimia_global_broadcast");
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  });
+  } | null>(null);
 
   useEffect(() => {
-    const handleStorageChange = () => {
+    // 1. Subscribe to Firestore broadcasts in real-time
+    const docRef = doc(db, "broadcasts", "global");
+    const unsubscribeBroadcast = onSnapshot(docRef, (snapshot) => {
       try {
-        const saved = localStorage.getItem("alquimia_global_broadcast");
-        setGlobalBroadcast(saved ? JSON.parse(saved) : null);
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          setGlobalBroadcast({
+            message: data.message || "",
+            author: data.author || "Administrador",
+            timestamp: data.timestamp || Date.now()
+          });
+        } else {
+          setGlobalBroadcast(null);
+        }
       } catch (e) {
-        // Safe play
+        console.error("Error reading broadcast data:", e);
       }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, "broadcasts/global");
+    });
+
+    // 2. Storage event listener for local themes or older storage sync
+    const handleStorageChange = () => {
       try {
         const savedTheme = localStorage.getItem("alquimia_global_theme");
         setActiveTheme(savedTheme || "default");
@@ -64,9 +76,10 @@ export default function App() {
       }
     };
     window.addEventListener("storage", handleStorageChange);
-    // Also capture local state events dispatched within the same tab/process manually
     window.addEventListener("local-broadcast-update", handleStorageChange);
+
     return () => {
+      unsubscribeBroadcast();
       window.removeEventListener("storage", handleStorageChange);
       window.removeEventListener("local-broadcast-update", handleStorageChange);
     };
@@ -93,68 +106,39 @@ export default function App() {
     setActiveAccount(acc);
   };
 
-  const handleUpdateHighScore = (finalScore: number) => {
+  const handleUpdateHighScore = async (finalScore: number) => {
     if (!activeAccount) return;
     if (finalScore > activeAccount.highscore) {
-      const saved = localStorage.getItem("alquimia_viral_accounts");
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved) as Account[];
-          const updated = parsed.map(acc => {
-            if (acc.username === activeAccount.username) {
-              return { ...acc, highscore: finalScore };
-            }
-            return acc;
-          });
-          localStorage.setItem("alquimia_viral_accounts", JSON.stringify(updated));
-          setActiveAccount({ ...activeAccount, highscore: finalScore });
-        } catch (e) {
-          console.error(e);
-        }
+      try {
+        const docRef = doc(db, "accounts", activeAccount.username);
+        await updateDoc(docRef, { highscore: finalScore });
+        setActiveAccount({ ...activeAccount, highscore: finalScore });
+      } catch (e) {
+        console.error("Error updating highscore:", e);
       }
     }
   };
 
-  const handleUpdateAccountData = (updatedFields: Partial<Account>) => {
+  const handleUpdateAccountData = async (updatedFields: Partial<Account>) => {
     if (!activeAccount) return;
-    const saved = localStorage.getItem("alquimia_viral_accounts");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved) as Account[];
-        const updated = parsed.map((acc) => {
-          if (acc.username === activeAccount.username) {
-            return {
-              ...acc,
-              ...updatedFields,
-            };
-          }
-          return acc;
-        });
-        localStorage.setItem("alquimia_viral_accounts", JSON.stringify(updated));
-        setActiveAccount((prev) => (prev ? { ...prev, ...updatedFields } : null));
-      } catch (e) {
-        console.error(e);
-      }
+    try {
+      const docRef = doc(db, "accounts", activeAccount.username);
+      await updateDoc(docRef, updatedFields);
+      setActiveAccount((prev) => (prev ? { ...prev, ...updatedFields } : null));
+    } catch (e) {
+      console.error("Error updating account data:", e);
     }
   };
 
-  const handleRecordGamePlay = () => {
+  const handleRecordGamePlay = async () => {
     if (!activeAccount) return;
-    const saved = localStorage.getItem("alquimia_viral_accounts");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved) as Account[];
-        const updated = parsed.map(acc => {
-          if (acc.username === activeAccount.username) {
-            return { ...acc, gamesPlayed: acc.gamesPlayed + 1 };
-          }
-          return acc;
-        });
-        localStorage.setItem("alquimia_viral_accounts", JSON.stringify(updated));
-        setActiveAccount({ ...activeAccount, gamesPlayed: activeAccount.gamesPlayed + 1 });
-      } catch (e) {
-        console.error(e);
-      }
+    try {
+      const docRef = doc(db, "accounts", activeAccount.username);
+      const nextGamesPlayed = activeAccount.gamesPlayed + 1;
+      await updateDoc(docRef, { gamesPlayed: nextGamesPlayed });
+      setActiveAccount({ ...activeAccount, gamesPlayed: nextGamesPlayed });
+    } catch (e) {
+      console.error("Error recording gameplay:", e);
     }
   };
 
@@ -329,6 +313,7 @@ export default function App() {
 
             {/* Admin Keypad Trigger Button */}
             <button
+              id="btn-admin-trigger"
               onClick={() => {
                 playSound("click");
                 setIsAdminOpen(true);
@@ -340,6 +325,7 @@ export default function App() {
 
             {/* Guide Button */}
             <button
+              id="btn-guide-trigger"
               onClick={() => {
                 playSound("click");
                 setShowHowToPlay(true);
@@ -407,6 +393,7 @@ export default function App() {
             {/* MAIN NAVIGATION TABS */}
             <div className="flex flex-col sm:flex-row bg-[#111827] p-2 rounded-[2rem] border-4 border-black max-w-2xl w-full font-mono text-xs gap-2 select-none">
               <button
+                id="tab-btn-prototype"
                 onClick={() => handleTabChange("prototype")}
                 className={`flex-1 py-3.5 px-4 rounded-2xl font-black uppercase text-xs tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer ${
                   activeTab === "prototype"
@@ -417,6 +404,7 @@ export default function App() {
                 <Layers className="w-4 h-4 shrink-0" /> 1. Rejilla Alquímica
               </button>
               <button
+                id="tab-btn-catalog"
                 onClick={() => handleTabChange("catalog")}
                 className={`flex-1 py-3.5 px-4 rounded-2xl font-black uppercase text-xs tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer ${
                   activeTab === "catalog"
@@ -427,6 +415,7 @@ export default function App() {
                 <BookOpen className="w-4 h-4 shrink-0" /> 2. Libro de Fórmulas
               </button>
               <button
+                id="tab-btn-designer"
                 onClick={() => handleTabChange("designer")}
                 className={`flex-1 py-3.5 px-4 rounded-2xl font-black uppercase text-xs tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer ${
                   activeTab === "designer"
@@ -479,6 +468,14 @@ export default function App() {
         )}
 
       </div>
+
+      {/* Dynamic step-by-step Tutorial Overlay */}
+      {activeAccount && !activeAccount.tutorialCompleted && (
+        <TutorialOverlay
+          activeUsername={activeAccount.username}
+          onComplete={() => handleUpdateAccountData({ tutorialCompleted: true })}
+        />
+      )}
 
       {/* Admin Control Center Modal */}
       <AdminPanel

@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { Account } from "./AccountManager";
 import { playSound } from "../utils/audio";
 import { motion, AnimatePresence } from "motion/react";
+import { doc, setDoc, deleteDoc } from "firebase/firestore";
+import { db, handleFirestoreError, OperationType } from "../firebase";
 import {
   ShieldCheck,
   ShieldAlert,
@@ -192,31 +194,35 @@ export default function AdminPanel({
     setStatusLog(`Reliquia [${relicId}] ${isOwned ? "desactivada" : "activada"} en el panel principal.`);
   };
 
-  const handleSendBroadcast = () => {
+  const handleSendBroadcast = async () => {
     if (!broadcastInput.trim()) return;
     playSound("levelUp");
-    const payload = JSON.stringify({
+    const docData = {
       message: broadcastInput.trim(),
       author: activeAccount?.username || "Administrador Supremo",
       timestamp: Date.now()
-    });
-    localStorage.setItem("alquimia_global_broadcast", payload);
-    window.dispatchEvent(new Event("storage"));
-    window.dispatchEvent(new Event("local-broadcast-update"));
-    setStatusLog(`Anuncio global emitido: "${broadcastInput}"`);
-    setBroadcastInput("");
+    };
+    try {
+      await setDoc(doc(db, "broadcasts", "global"), docData);
+      setStatusLog(`Anuncio global emitido en tiempo real: "${broadcastInput}"`);
+      setBroadcastInput("");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, "broadcasts/global");
+    }
   };
 
   const handlePresetBroadcast = (preset: string) => {
     setBroadcastInput(preset);
   };
 
-  const handleClearBroadcast = () => {
+  const handleClearBroadcast = async () => {
     playSound("click");
-    localStorage.removeItem("alquimia_global_broadcast");
-    window.dispatchEvent(new Event("storage"));
-    window.dispatchEvent(new Event("local-broadcast-update"));
-    setStatusLog("Mensaje global retirado de los cielos.");
+    try {
+      await deleteDoc(doc(db, "broadcasts", "global"));
+      setStatusLog("Mensaje global retirado de los cielos (sincronizado).");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, "broadcasts/global");
+    }
   };
 
   return (
