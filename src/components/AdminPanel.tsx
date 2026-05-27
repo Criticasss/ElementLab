@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Account } from "./AccountManager";
 import { playSound } from "../utils/audio";
 import { motion, AnimatePresence } from "motion/react";
-import { doc, setDoc, deleteDoc } from "firebase/firestore";
+import { doc, setDoc, deleteDoc, collection, onSnapshot } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "../firebase";
 import {
   ShieldCheck,
@@ -45,6 +45,35 @@ export default function AdminPanel({
   const [isError, setIsError] = useState<boolean>(false);
   const [statusLog, setStatusLog] = useState<string>("ESPERANDO CÓDIGO DE AUTORIZACIÓN...");
   const [broadcastInput, setBroadcastInput] = useState<string>("");
+  const [allAccounts, setAllAccounts] = useState<Account[]>([]);
+  const broadcastTimeoutRef = useRef<any>(null);
+
+  // Clean up any pending broadcast automatic clear timer on unmount
+  useEffect(() => {
+    return () => {
+      if (broadcastTimeoutRef.current) {
+        clearTimeout(broadcastTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Listen to all accounts when authenticated for administrator safety actions
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setAllAccounts([]);
+      return;
+    }
+    const unsub = onSnapshot(collection(db, "accounts"), (snapshot) => {
+      const list: Account[] = [];
+      snapshot.forEach((doc) => {
+        list.push(doc.data() as Account);
+      });
+      setAllAccounts(list);
+    }, (error) => {
+      console.error("Error subscribiendo a cuentas de admin:", error);
+    });
+    return () => unsub();
+  }, [isAuthenticated]);
 
   // Keyboard listener for pin-pad entry
   useEffect(() => {
@@ -204,8 +233,22 @@ export default function AdminPanel({
     };
     try {
       await setDoc(doc(db, "broadcasts", "global"), docData);
-      setStatusLog(`Anuncio global emitido en tiempo real: "${broadcastInput}"`);
+      setStatusLog(`Anuncio global emitido: "${broadcastInput}" (desaparece en 5s por defecto)`);
       setBroadcastInput("");
+
+      // Clear any previous pending auto-delete
+      if (broadcastTimeoutRef.current) {
+        clearTimeout(broadcastTimeoutRef.current);
+      }
+
+      // Auto-delete from Firestore after 5 seconds
+      broadcastTimeoutRef.current = setTimeout(async () => {
+        try {
+          await deleteDoc(doc(db, "broadcasts", "global"));
+        } catch (err) {
+          console.error("Error doing auto-delete of broadcast from db:", err);
+        }
+      }, 5000);
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, "broadcasts/global");
     }
@@ -222,6 +265,16 @@ export default function AdminPanel({
       setStatusLog("Mensaje global retirado de los cielos (sincronizado).");
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, "broadcasts/global");
+    }
+  };
+
+  const handleDeleteAccountAdmin = async (username: string) => {
+    playSound("fail");
+    try {
+      await deleteDoc(doc(db, "accounts", username));
+      setStatusLog(`Cuenta de usurpador [${username}] eliminada exitosamente del reino.`);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `accounts/${username}`);
     }
   };
 
@@ -663,6 +716,96 @@ export default function AdminPanel({
                           </button>
                         </div>
                       </div>
+
+                      {/* Section: Live Multiplayer Events (Alchemical Cosmic Eclipse Mode - 45-second astral field) */}
+                      <div className="space-y-2 bg-[#1f2937]/50 p-4 rounded-3xl border-2 border-slate-800 text-left">
+                        <h4 className="text-[10px] uppercase font-black tracking-widest text-[#d946ef] flex items-center gap-1.5 border-b border-slate-800 pb-1 mb-2.5 font-mono">
+                          🌌 EVENTO EN VIVO: ECLIPSE ALQUÍMICO (SÍNCRO)
+                        </h4>
+                        <p className="text-[10px] text-gray-400 font-semibold mb-2 leading-tight">
+                          Inicia un eclipse místico de 45 segundos para todas las pantallas de ElementLab de forma síncrona. La web entra en penumbra astral y las cartas de la rejilla brillarán intensamente en neón:
+                        </p>
+                        
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            onClick={async () => {
+                              playSound("levelUp");
+                              try {
+                                await setDoc(doc(db, "broadcasts", "event"), {
+                                  message: "eclipse_mode",
+                                  author: activeAccount?.username || "Administrador Supremo",
+                                  timestamp: Date.now()
+                                });
+                                setStatusLog("¡Eclipse Alquímico activado globalmente por 45s!");
+                              } catch (e) {
+                                handleFirestoreError(e, OperationType.WRITE, "broadcasts/event");
+                              }
+                            }}
+                            className="px-3 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl border-2 border-black font-black text-[10px] uppercase tracking-wider shadow-[3px_3px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-[1px_1px_0px_rgba(0,0,0,1)] transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                          >
+                            🌌 Desatar Eclipse (45s)
+                          </button>
+
+                          <button
+                            onClick={async () => {
+                              playSound("fail");
+                              try {
+                                await setDoc(doc(db, "broadcasts", "event"), {
+                                  message: "inactive",
+                                  author: activeAccount?.username || "Administrador Supremo",
+                                  timestamp: Date.now()
+                                });
+                                setStatusLog("Eclipse celestial terminado/apagado.");
+                              } catch (e) {
+                                handleFirestoreError(e, OperationType.WRITE, "broadcasts/event");
+                              }
+                            }}
+                            className="px-3 py-2.5 bg-slate-900 border-2 border-dashed border-red-500/50 hover:bg-red-950/40 text-red-400 rounded-xl font-bold text-[10px] uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                          >
+                            🚫 Apagar Eclipse
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Section: Direct Account Management (Secure admin power alternative) */}
+                      <div className="space-y-2.5 bg-[#1f2937]/50 p-4 rounded-3xl border-2 border-slate-800 text-left">
+                        <h4 className="text-[10px] uppercase font-black tracking-widest text-[#ef4444] flex items-center gap-1.5 border-b border-slate-800 pb-1 mb-2.5 font-mono">
+                          🛡️ GESTIÓN DE USUARIOS MÁGICOS (SEGURA)
+                        </h4>
+                        <p className="text-[10px] text-gray-400 font-semibold mb-2 leading-tight">
+                          ¿Alguien se hace pasar por un administrador o creador (ej. "[founder]")? Elimínalos o modéralos instantáneamente con un solo clic de forma segura, sin tener que usar ni revelar contraseñas:
+                        </p>
+
+                        <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1">
+                          {allAccounts.map((acc) => (
+                            <div 
+                              key={acc.username}
+                              className="bg-black/40 border border-slate-850 p-2.5 rounded-xl flex items-center justify-between gap-3 font-mono"
+                            >
+                              <div className="min-w-0">
+                                <span className="text-xs font-black uppercase text-white tracking-wide block truncate">
+                                  {acc.username}
+                                </span>
+                                <span className="text-[9px] font-mono text-gray-500 block mt-0.5">
+                                  Récord CO: <strong className="text-amber-400">{acc.highscore}</strong> • Éter: <strong className="text-cyan-400">{acc.etherGems || 0}</strong>
+                                </span>
+                              </div>
+                              <button
+                                onClick={() => handleDeleteAccountAdmin(acc.username)}
+                                className="px-2 py-1.5 bg-red-950/40 hover:bg-red-900 border-2 border-red-800 hover:border-red-600 text-red-400 hover:text-white rounded-lg text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center shrink-0"
+                              >
+                                Eliminar 🧙
+                              </button>
+                            </div>
+                          ))}
+                          {allAccounts.length === 0 && (
+                            <div className="text-center py-4 text-[10px] text-gray-500 italic">
+                              Cargando alquimistas de la nube...
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
                     </div>
                   )}
                 </div>

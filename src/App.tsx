@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import { doc, onSnapshot, updateDoc } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "./firebase";
 import GameConceptCatalog from "./components/GameConceptCatalog";
@@ -6,6 +7,7 @@ import PlayablePrototype from "./components/PlayablePrototype";
 import AICoDesigner from "./components/AICoDesigner";
 import AccountManager, { Account } from "./components/AccountManager";
 import TutorialOverlay from "./components/TutorialOverlay";
+import AlchemicalEclipseEvent from "./components/AlchemicalEclipseEvent";
 import AdminPanel from "./components/AdminPanel";
 import { ElementSymbol } from "./types";
 import { toggleSound, playSound } from "./utils/audio";
@@ -84,6 +86,20 @@ export default function App() {
       window.removeEventListener("local-broadcast-update", handleStorageChange);
     };
   }, []);
+
+  useEffect(() => {
+    if (!globalBroadcast) return;
+    const elapsed = Date.now() - globalBroadcast.timestamp;
+    const remaining = 5000 - elapsed;
+    if (remaining <= 0) {
+      setGlobalBroadcast(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setGlobalBroadcast(null);
+    }, remaining);
+    return () => clearTimeout(timer);
+  }, [globalBroadcast]);
 
   const handleUnlockCard = (newCard: ElementSymbol) => {
     setCustomUnlockedCards((prev) => [...prev, newCard]);
@@ -264,28 +280,36 @@ export default function App() {
           }
         `}} />
 
-        {/* Real-time Global Admin Broadcast Banner (Fixed floating at top center) */}
-        {globalBroadcast && (
-          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-[calc(100%-2rem)] max-w-xl bg-red-650 border-4 border-black text-white px-5 py-3 rounded-[2rem] flex items-center justify-between gap-4 shadow-[8px_8px_0px_rgba(0,0,0,0.6)] overflow-hidden select-none font-mono transition-all duration-300">
-            <div className="flex items-center gap-2.5 overflow-hidden">
-              <span className="animate-pulse shrink-0">📢</span>
-              <p className="text-xs font-black uppercase tracking-wider truncate">
-                <span className="text-yellow-300">{globalBroadcast.author}</span>: "{globalBroadcast.message}"
-              </p>
-            </div>
-
-            <button
-              onClick={() => {
-                playSound("click");
-                setGlobalBroadcast(null);
-              }}
-              className="p-1.5 rounded-xl bg-black/30 hover:bg-black/50 text-white border-2 border-black shrink-0 cursor-pointer active:translate-y-0.5"
-              title="Ocultar transmisión"
+        {/* Real-time Global Admin Broadcast Banner (Fixed floating at top center with clean animations) */}
+        <AnimatePresence>
+          {globalBroadcast && (
+            <motion.div
+              initial={{ y: -80, x: "-50%", opacity: 0 }}
+              animate={{ y: 0, x: "-50%", opacity: 1 }}
+              exit={{ y: -80, x: "-50%", opacity: 0 }}
+              transition={{ type: "spring", damping: 15, stiffness: 120 }}
+              className="fixed top-4 left-1/2 z-[100] w-[calc(100%-2rem)] max-w-xl bg-red-650 border-4 border-black text-white px-5 py-3 rounded-[2rem] flex items-center justify-between gap-4 shadow-[8px_8px_0px_rgba(0,0,0,0.6)] overflow-hidden select-none font-mono"
             >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        )}
+              <div className="flex items-center gap-2.5 overflow-hidden">
+                <span className="animate-pulse shrink-0">📢</span>
+                <p className="text-xs font-black uppercase tracking-wider truncate">
+                  <span className="text-yellow-300">{globalBroadcast.author}</span>: "{globalBroadcast.message}"
+                </p>
+              </div>
+
+              <button
+                onClick={() => {
+                  playSound("click");
+                  setGlobalBroadcast(null);
+                }}
+                className="p-1.5 rounded-xl bg-black/30 hover:bg-black/50 text-white border-2 border-black shrink-0 cursor-pointer active:translate-y-0.5"
+                title="Ocultar transmisión"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Navigation & Header */}
         <header className="flex flex-col lg:flex-row justify-between items-start lg:items-end pb-8 border-b-4 border-black gap-6">
@@ -469,6 +493,9 @@ export default function App() {
           onComplete={() => handleUpdateAccountData({ tutorialCompleted: true })}
         />
       )}
+
+      {/* Real-time Global Alchemical Eclipse Mode Overlay */}
+      <AlchemicalEclipseEvent />
 
       {/* Admin Control Center Modal */}
       <AdminPanel
