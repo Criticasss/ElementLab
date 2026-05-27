@@ -17,6 +17,7 @@ export interface Account {
     chaos: number;
   };
   tutorialCompleted?: boolean;
+  achievements?: string[];
 }
 
 interface AccountManagerProps {
@@ -105,7 +106,8 @@ export default function AccountManager({ onAccountChange, activeAccount }: Accou
         etherGems: 15, // Starts with some premium starter currency for potions!
         relics: [],
         potions: { midas: 1, time: 0, chaos: 0 },
-        tutorialCompleted: false
+        tutorialCompleted: false,
+        achievements: []
       };
 
       await setDoc(doc(db, "accounts", cleanName), newAcc);

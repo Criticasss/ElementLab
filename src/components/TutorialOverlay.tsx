@@ -41,10 +41,22 @@ const TUTORIAL_STEPS: TutorialStep[] = [
     position: "bottom"
   },
   {
+    targetId: "tab-btn-achievements",
+    title: "🏆 4. Logros y Rangos del Alquimista",
+    description: "¡Supera desafíos fantásticos para desbloquear logros, acumular medallas de honor y ascender tu rango desde Novato de Cobre hasta Supremo del canónigo!",
+    position: "bottom"
+  },
+  {
     targetId: "btn-admin-trigger",
     title: "👑 Panel de Reglas Cósmicas",
     description: "Si eres Administrador, puedes alterar el clima estético del laboratorio (Selva, Infierno, Mar, Cyberpunk) o emitir anuncios globales para todos los usuarios en la nube.",
     position: "left"
+  },
+  {
+    targetId: "btn-announcements-trigger",
+    title: "📢 Tablón de Anuncios y Avisos",
+    description: "¡Mantente al día! Pulsa este botón para abrir la cartelera del laboratorio, descubrir eventos de tiempo limitado, nuevas mecánicas añadidas y los últimos balances de transmutación.",
+    position: "bottom"
   },
   {
     targetId: "btn-guide-trigger",

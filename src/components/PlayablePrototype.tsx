@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { ElementSymbol, GameState, Rarity } from "../types";
 import { playSound } from "../utils/audio";
 import { Account } from "./AccountManager";
+import { motion, AnimatePresence } from "motion/react";
+import { ACHIEVEMENTS_LIST } from "./AchievementsPanel";
 import {
   RotateCcw,
   Sparkles,
@@ -19,7 +21,8 @@ import {
   ShoppingBag,
   Wand2,
   Clock,
-  RotateCw
+  RotateCw,
+  Award
 } from "lucide-react";
 
 // Standard starter elements
@@ -73,6 +76,44 @@ export default function PlayablePrototype({
   const [isSoundOn, setIsSoundOn] = useState(true);
   const [gameLog, setGameLog] = useState<string[]>(["¡Bienvenido a la Rejilla de Alquimia! Coloca elementos en el tablero para generar sinergias y oro."]);
   const [selectedHandIndex, setSelectedHandIndex] = useState<number | null>(null);
+
+  // Active Achievement Unlock Toast State
+  const [toastNotification, setToastNotification] = useState<{
+    id: string;
+    name: string;
+    emoji: string;
+    criteria: string;
+  } | null>(null);
+
+  // Helper trigger to unlock achievement
+  const triggerAchievementUnlock = (achievementId: string) => {
+    if (!activeAccount) return;
+    const currentAchievements = activeAccount.achievements || [];
+    if (currentAchievements.includes(achievementId)) return;
+
+    const match = ACHIEVEMENTS_LIST.find((a) => a.id === achievementId);
+    if (match) {
+      playSound("levelUp");
+      setToastNotification({
+        id: achievementId,
+        name: match.name,
+        emoji: match.emoji,
+        criteria: match.criteria
+      });
+
+      // Show toast on-screen and automatically fade out in 4.5 seconds
+      setTimeout(() => {
+        setToastNotification(null);
+      }, 4500);
+    }
+
+    const updatedAchievements = [...currentAchievements, achievementId];
+
+    // Propagate updates to the global active account state
+    onUpdateAccountData({
+      achievements: updatedAchievements
+    });
+  };
 
   // Floating Effects Visual FX for Game Juice
   const [floatingEffects, setFloatingEffects] = useState<{
@@ -624,6 +665,62 @@ export default function PlayablePrototype({
     setTurnsLeft((prev) => prev - 1);
     setSelectedHandIndex(null);
 
+    // Evaluate Achievements triggers on placement
+    if (activeAccount) {
+      // 1. "piromano" (10 fire elements placed)
+      if (selectedCard.symbol === "🔥" || selectedCard.symbol === "🌋") {
+        const usernameKey = activeAccount.username || "anonymous";
+        const currentCount = parseInt(localStorage.getItem(`fire_placed_${usernameKey}`) || "0") + 1;
+        localStorage.setItem(`fire_placed_${usernameKey}`, currentCount.toString());
+        if (currentCount >= 10) {
+          triggerAchievementUnlock("piromano");
+        }
+      }
+
+      // 2. "vacio" (create legendary)
+      if (selectedCard.rarity === "legendario" || updatedGrid.some(cell => cell?.rarity === "legendario")) {
+        triggerAchievementUnlock("vacio");
+      }
+
+      // 3. "rey_midas" (Flor de Oro created ⚜️)
+      if (updatedGrid.some(cell => cell?.symbol === "⚜️")) {
+        triggerAchievementUnlock("rey_midas");
+      }
+
+      // 4. "gran_cosecha" (generate 60+ gold)
+      if (turnGold >= 60) {
+        triggerAchievementUnlock("gran_cosecha");
+      }
+
+      // 5. "apicultor" (Bee adyacent to a flower/girasol/golden_flower)
+      const hasApicultorCombo = updatedGrid.some((cell, cellIdx) => {
+        if (cell?.symbol === "🐝") {
+          const row = Math.floor(cellIdx / 3);
+          const col = cellIdx % 3;
+          const neighbors: number[] = [];
+          if (row > 0) neighbors.push(cellIdx - 3);
+          if (row < 2) neighbors.push(cellIdx + 3);
+          if (col > 0) neighbors.push(cellIdx - 1);
+          if (col < 2) neighbors.push(cellIdx + 1);
+
+          return neighbors.some(nIdx => {
+            const neighbor = updatedGrid[nIdx];
+            return neighbor && (neighbor.symbol === "🌸" || neighbor.symbol === "⚜️" || neighbor.symbol === "🌻");
+          });
+        }
+        return false;
+      });
+      if (hasApicultorCombo) {
+        triggerAchievementUnlock("apicultor");
+      }
+
+      // 6. "rejilla_llena" (9 grid cells occupied)
+      const allFilled = updatedGrid.every(cell => cell !== null);
+      if (allFilled) {
+        triggerAchievementUnlock("rejilla_llena");
+      }
+    }
+
     // Log the turn
     addLog(`Colocaste ${selectedCard.symbol} ${selectedCard.name}. Generó +${turnGold} Oro (Base + Sinergias).`);
 
@@ -788,6 +885,36 @@ export default function PlayablePrototype({
 
   return (
     <div id="playable-prototype" className="flex flex-col gap-8">
+      {/* Toast Notification for Achievements Unlocks with clean slide / scale animations */}
+      <AnimatePresence>
+        {toastNotification && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9, x: "-50%" }}
+            animate={{ opacity: 1, y: 0, scale: 1, x: "-50%" }}
+            exit={{ opacity: 0, y: -40, scale: 0.95, transition: { duration: 0.25 }, x: "-50%" }}
+            className="fixed bottom-10 left-1/2 z-[999] w-[calc(100%-2rem)] max-w-md bg-gradient-to-r from-amber-500 via-amber-600 to-rose-600 border-4 border-black text-white px-5 py-3.5 rounded-[2rem] flex items-center gap-4 shadow-[8px_8px_0px_rgba(0,0,0,0.8)] outline-none overflow-hidden"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-black border-2 border-white flex items-center justify-center text-2xl shrink-0 shadow-lg select-none">
+              {toastNotification.emoji}
+            </div>
+            <div className="flex-1 min-w-0">
+              <span className="text-[10px] font-mono text-yellow-200 uppercase tracking-widest font-black block animate-pulse">
+                🏆 ¡LOGRO DESBLOQUEADO!
+              </span>
+              <p className="text-sm font-black uppercase text-white tracking-wide truncate">
+                {toastNotification.name}
+              </p>
+              <p className="text-[10px] text-white/90 font-medium tracking-tight">
+                {toastNotification.criteria}
+              </p>
+            </div>
+            <div className="shrink-0 text-white font-black text-xs bg-black/40 px-3 py-1 rounded-full border border-white/20 select-none animate-bounce font-mono">
+              +AR 🎖️
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Custom float keyframes for Game Juice Visual FX */}
       <style>{`
         @keyframes float-up-fade {

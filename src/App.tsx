@@ -6,9 +6,11 @@ import GameConceptCatalog from "./components/GameConceptCatalog";
 import PlayablePrototype from "./components/PlayablePrototype";
 import AICoDesigner from "./components/AICoDesigner";
 import AccountManager, { Account } from "./components/AccountManager";
+import AchievementsPanel from "./components/AchievementsPanel";
 import TutorialOverlay from "./components/TutorialOverlay";
 import AlchemicalEclipseEvent from "./components/AlchemicalEclipseEvent";
 import AdminPanel from "./components/AdminPanel";
+import AnnouncementsModal from "./components/AnnouncementsModal";
 import { ElementSymbol } from "./types";
 import { toggleSound, playSound } from "./utils/audio";
 import {
@@ -22,16 +24,19 @@ import {
   X,
   Terminal,
   Play,
-  ShieldAlert
+  ShieldAlert,
+  Award,
+  Megaphone
 } from "lucide-react";
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<"prototype" | "catalog" | "designer">("prototype");
+  const [activeTab, setActiveTab] = useState<"prototype" | "catalog" | "designer" | "achievements">("prototype");
   const [customUnlockedCards, setCustomUnlockedCards] = useState<ElementSymbol[]>([]);
   const [isSoundOn, setIsSoundOn] = useState(true);
   const [showHowToPlay, setShowHowToPlay] = useState(true);
   const [activeAccount, setActiveAccount] = useState<Account | null>(null);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
+  const [isAnnouncementsOpen, setIsAnnouncementsOpen] = useState(false);
   const [activeTheme, setActiveTheme] = useState<string>(() => {
     try {
       return localStorage.getItem("alquimia_global_theme") || "default";
@@ -113,7 +118,7 @@ export default function App() {
     }
   };
 
-  const handleTabChange = (tab: "prototype" | "catalog" | "designer") => {
+  const handleTabChange = (tab: "prototype" | "catalog" | "designer" | "achievements") => {
     playSound("click");
     setActiveTab(tab);
   };
@@ -330,14 +335,26 @@ export default function App() {
 
             {/* Admin Keypad Trigger Button */}
             <button
-              id="btn-admin-trigger"
-              onClick={() => {
-                playSound("click");
-                setIsAdminOpen(true);
-              }}
-              className="px-4 py-2 bg-[#4F46E5] hover:bg-indigo-700 border-4 border-black rounded-2xl text-xs font-black text-white tracking-widest uppercase shadow-[4px_4px_0px_rgba(0,0,0,1)] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_rgba(0,0,0,1)] active:translate-y-[4px] active:shadow-[0px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
+               id="btn-admin-trigger"
+               onClick={() => {
+                 playSound("click");
+                 setIsAdminOpen(true);
+               }}
+               className="px-4 py-2 bg-[#4F46E5] hover:bg-indigo-700 border-4 border-black rounded-2xl text-xs font-black text-white tracking-widest uppercase shadow-[4px_4px_0px_rgba(0,0,0,1)] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_rgba(0,0,0,1)] active:translate-y-[4px] active:shadow-[0px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
             >
               <ShieldAlert className="w-4 h-4 shrink-0 text-white animate-pulse" /> ADMIN
+            </button>
+
+            {/* Announcements Trigger Button */}
+            <button
+              id="btn-announcements-trigger"
+              onClick={() => {
+                playSound("click");
+                setIsAnnouncementsOpen(true);
+              }}
+              className="px-4 py-2 bg-[#E11D48] hover:bg-rose-700 border-4 border-black rounded-2xl text-xs font-black text-white tracking-widest uppercase shadow-[4px_4px_0px_rgba(0,0,0,1)] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_rgba(0,0,0,1)] active:translate-y-[4px] active:shadow-[0px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
+            >
+              <Megaphone className="w-4 h-4 shrink-0 text-white animate-bounce" /> ANUNCIOS
             </button>
 
             {/* Guide Button */}
@@ -385,7 +402,8 @@ export default function App() {
                 <p className="text-sm text-white/95 mt-2 leading-relaxed font-medium">
                   1. <strong className="underline decoration-yellow-300 decoration-2">Revisa las recetas</strong> en la pestaña <strong className="font-extrabold">2. Libro de Fórmulas</strong> para dominar las combinaciones y sus suculentos bonos.<br />
                   2. <strong className="underline decoration-yellow-300 decoration-2">Coloca elementos</strong> de tu mano en la pestaña <strong className="font-extrabold">1. Rejilla Alquímica</strong> (tablero 3x3) de forma adyacente para detonar fusiones espontáneas y ganar oro.<br />
-                  3. <strong className="underline decoration-yellow-300 decoration-2">Crea tus propias cartas</strong> en la pestaña <strong className="font-extrabold">3. Alquimia de IA</strong> usando tus ideas más ingeniosas e inyéctalas directamente al tablero en tiempo real.
+                  3. <strong className="underline decoration-yellow-300 decoration-2">Crea tus propias cartas</strong> en la pestaña <strong className="font-extrabold">3. Alquimia de IA</strong> de forma libre y compártelas con el cosmos.<br />
+                  4. <strong className="underline decoration-yellow-300 decoration-2">Desbloquea logros y asciende de rango</strong> en la pestaña <strong className="font-extrabold">4. Logros y Rangos</strong> cumpliendo desafíos locos para convertirte en el Gran Maestro del de la Rejilla.
                 </p>
               </div>
             </div>
@@ -408,7 +426,7 @@ export default function App() {
         {activeAccount ? (
           <>
             {/* MAIN NAVIGATION TABS */}
-            <div className="flex flex-col sm:flex-row bg-[#111827] p-2 rounded-[2rem] border-4 border-black max-w-2xl w-full font-mono text-xs gap-2 select-none">
+            <div className="flex flex-col sm:flex-row bg-[#111827] p-2 rounded-[2rem] border-4 border-black max-w-3xl w-full font-mono text-xs gap-2 select-none">
               <button
                 id="tab-btn-prototype"
                 onClick={() => handleTabChange("prototype")}
@@ -442,6 +460,17 @@ export default function App() {
               >
                 <Zap className="w-4 h-4 shrink-0" /> 3. Alquimia de IA
               </button>
+              <button
+                id="tab-btn-achievements"
+                onClick={() => handleTabChange("achievements")}
+                className={`flex-1 py-3.5 px-4 rounded-2xl font-black uppercase text-xs tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  activeTab === "achievements"
+                    ? "bg-[#EC4899] text-white border-4 border-black shadow-[4px_4px_0px_rgba(0,0,0,1)] scale-[1.03]"
+                    : "text-gray-400 bg-slate-900/30 border-4 border-transparent hover:border-black/40 hover:text-white"
+                }`}
+              >
+                <Award className="w-4 h-4 shrink-0" /> 4. Logros y Rangos
+              </button>
             </div>
 
             {/* ACTIVE MODULE CONTAINER */}
@@ -469,6 +498,10 @@ export default function App() {
                     quota: 30,
                   }}
                 />
+              )}
+
+              {activeTab === "achievements" && (
+                <AchievementsPanel activeAccount={activeAccount} />
               )}
             </div>
           </>
@@ -514,6 +547,12 @@ export default function App() {
             console.error(e);
           }
         }}
+      />
+
+      {/* Announcements & Bulletin Board Modal */}
+      <AnnouncementsModal
+        isOpen={isAnnouncementsOpen}
+        onClose={() => setIsAnnouncementsOpen(false)}
       />
 
       {/* Footer */}
