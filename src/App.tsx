@@ -264,21 +264,14 @@ export default function App() {
           }
         `}} />
 
-        {/* Real-time Global Admin Broadcast Banner */}
+        {/* Real-time Global Admin Broadcast Banner (Fixed floating at top center) */}
         {globalBroadcast && (
-          <div className="bg-red-650 border-4 border-black text-white px-4 py-3.5 rounded-[2rem] flex items-center justify-between gap-4 shadow-[6px_6px_0px_#000] overflow-hidden select-none font-mono">
-            <div className="flex items-center gap-1.5 shrink-0 font-black text-[10px] uppercase bg-black text-red-400 px-3 py-1 rounded-xl border-2 border-red-500/30 animate-pulse">
-              📢 COMUNICADO SUPREMO:
-            </div>
-            
-            <div className="flex-1 overflow-hidden relative h-5 flex items-center">
-              <div className="absolute whitespace-nowrap text-xs font-black uppercase tracking-wider flex items-center gap-16 animate-global-marquee">
-                <span>{globalBroadcast.message} — <span className="text-yellow-300">firmado por {globalBroadcast.author}</span></span>
-                <span className="text-red-400">•</span>
-                <span>{globalBroadcast.message} — <span className="text-yellow-300">firmado por {globalBroadcast.author}</span></span>
-                <span className="text-red-400">•</span>
-                <span>{globalBroadcast.message} — <span className="text-yellow-300">firmado por {globalBroadcast.author}</span></span>
-              </div>
+          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-[calc(100%-2rem)] max-w-xl bg-red-650 border-4 border-black text-white px-5 py-3 rounded-[2rem] flex items-center justify-between gap-4 shadow-[8px_8px_0px_rgba(0,0,0,0.6)] overflow-hidden select-none font-mono transition-all duration-300">
+            <div className="flex items-center gap-2.5 overflow-hidden">
+              <span className="animate-pulse shrink-0">📢</span>
+              <p className="text-xs font-black uppercase tracking-wider truncate">
+                <span className="text-yellow-300">{globalBroadcast.author}</span>: "{globalBroadcast.message}"
+              </p>
             </div>
 
             <button
