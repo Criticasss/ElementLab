@@ -351,7 +351,7 @@ export default function AccountManager({ onAccountChange, activeAccount }: Accou
                     setTargetAccount(null);
                     setErrorMsg("");
                   }}
-                  className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-750 text-gray-300 rounded-xl font-black uppercase text-[10px] tracking-wider border-2 border-black shadow-[2px_2px_0px_rgba(0,0,0,1)] active:translate-y-0.5 cursor-pointer"
+                  className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-755 text-gray-300 rounded-xl font-black uppercase text-[10px] tracking-wider border-2 border-black shadow-[2px_2px_0px_rgba(0,0,0,1)] active:translate-y-0.5 cursor-pointer"
                 >
                   Cancelar
                 </button>
@@ -402,7 +402,7 @@ export default function AccountManager({ onAccountChange, activeAccount }: Accou
                     setTargetAccount(null);
                     setErrorMsg("");
                   }}
-                  className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-750 text-gray-300 rounded-xl font-black uppercase text-[10px] tracking-wider border-2 border-black shadow-[2px_2px_0px_rgba(0,0,0,1)] active:translate-y-0.5 cursor-pointer"
+                  className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-755 text-gray-300 rounded-xl font-black uppercase text-[10px] tracking-wider border-2 border-black shadow-[2px_2px_0px_rgba(0,0,0,1)] active:translate-y-0.5 cursor-pointer"
                 >
                   Cancelar
                 </button>
@@ -415,6 +415,8 @@ export default function AccountManager({ onAccountChange, activeAccount }: Accou
               </div>
             </form>
           )}
+
+
         </div>
 
         {/* Right Side: Saved Cloud Accounts Grid */}

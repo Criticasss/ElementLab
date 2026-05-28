@@ -20,7 +20,8 @@ import {
   Palette,
   Flame,
   Waves,
-  Trees
+  Trees,
+  Gem
 } from "lucide-react";
 
 interface AdminPanelProps {
@@ -46,6 +47,7 @@ export default function AdminPanel({
   const [statusLog, setStatusLog] = useState<string>("ESPERANDO CÓDIGO DE AUTORIZACIÓN...");
   const [broadcastInput, setBroadcastInput] = useState<string>("");
   const [allAccounts, setAllAccounts] = useState<Account[]>([]);
+  const [gemsAmountInput, setGemsAmountInput] = useState<string>("");
   const broadcastTimeoutRef = useRef<any>(null);
 
   // Clean up any pending broadcast automatic clear timer on unmount
@@ -268,13 +270,83 @@ export default function AdminPanel({
     }
   };
 
-  const handleDeleteAccountAdmin = async (username: string) => {
-    playSound("fail");
+  const handleDefaultAccountAdmin = async (acc: Account) => {
+    playSound("levelUp");
+    
+    // Find next available user number in the list
+    let index = 1;
+    let candidate = `user${index}`;
+    while (allAccounts.some((a) => a.username.toLowerCase() === candidate.toLowerCase())) {
+      index++;
+      candidate = `user${index}`;
+    }
+
     try {
-      await deleteDoc(doc(db, "accounts", username));
-      setStatusLog(`Cuenta de usurpador [${username}] eliminada exitosamente del reino.`);
+      const oldUsername = acc.username;
+      const newUsername = candidate;
+
+      const updatedAcc: Account = {
+        ...acc,
+        username: newUsername
+      };
+
+      await setDoc(doc(db, "accounts", newUsername), updatedAcc);
+      await deleteDoc(doc(db, "accounts", oldUsername));
+
+      setStatusLog(`Cuenta de [${oldUsername}] renombrada a [${newUsername}] (DEFAULT) exitosamente.`);
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `accounts/${username}`);
+      handleFirestoreError(error, OperationType.WRITE, `accounts/rename_admin`);
+    }
+  };
+
+  const handleBulkGemsUpdate = async (action: "add" | "remove") => {
+    const amount = parseInt(gemsAmountInput.trim(), 10);
+    if (isNaN(amount) || amount <= 0) {
+      playSound("fail");
+      setStatusLog("Por favor, introduce una cantidad válida mayor que 0.");
+      return;
+    }
+
+    if (allAccounts.length === 0) {
+      playSound("fail");
+      setStatusLog("No hay cuentas activas registradas en el servidor.");
+      return;
+    }
+
+    playSound("levelUp");
+    setStatusLog(`Procesando transmutación de gemas para ${allAccounts.length} usuarios...`);
+
+    let updatedCount = 0;
+    try {
+      for (const acc of allAccounts) {
+        const currentGems = acc.etherGems || 0;
+        const newGems = action === "add" 
+          ? currentGems + amount 
+          : Math.max(0, currentGems - amount);
+
+        const updatedAcc: Account = {
+          ...acc,
+          etherGems: newGems
+        };
+
+        await setDoc(doc(db, "accounts", acc.username), updatedAcc);
+
+        // If this is the active user playing right now, sync their active state as well
+        if (activeAccount && activeAccount.username === acc.username) {
+          onUpdateAccountData({ etherGems: newGems });
+        }
+        updatedCount++;
+      }
+
+      setGemsAmountInput("");
+      if (action === "add") {
+        setStatusLog(`¡Se han añadido +${amount} Gemas de Éter a todos los usuarios (${updatedCount} cuentas)!`);
+      } else {
+        setStatusLog(`¡Se han descontado -${amount} Gemas de Éter a todos los usuarios (${updatedCount} cuentas)!`);
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, "accounts/bulk_gems_update");
+      setStatusLog("Error al propagar gemas en la nube de ElementLab.");
     }
   };
 
@@ -767,6 +839,49 @@ export default function AdminPanel({
                         </div>
                       </div>
 
+                      {/* Section: Bulk Ether Gems Dispatcher / Reducer */}
+                      <div className="space-y-3 bg-[#1f2937]/50 p-4 rounded-3xl border-2 border-slate-800 text-left">
+                        <h4 className="text-[10px] uppercase font-black tracking-widest text-cyan-400 flex items-center gap-1.5 border-b border-slate-800 pb-1 mb-2 font-mono">
+                          💎 TRANSMUTADOR GLOBAL DE GEMAS DE ÉTER
+                        </h4>
+                        <p className="text-[10px] text-gray-400 font-semibold mb-2 leading-tight">
+                          Introduce una cantidad de gemas para enviar (añadir) o eliminar (descontar) a todos los usuarios activos registrados en el grimorio:
+                        </p>
+
+                        <div className="flex flex-col gap-2">
+                          <div className="relative">
+                            <input
+                              type="number"
+                              min="1"
+                              value={gemsAmountInput}
+                              onChange={(e) => setGemsAmountInput(e.target.value)}
+                              placeholder="Ej: 50, 100, 1000..."
+                              className="w-full bg-black border-2 border-black rounded-xl text-xs font-black p-3 pr-10 text-white placeholder-gray-600 focus:outline-none focus:border-cyan-500 shadow-inner [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none font-mono"
+                            />
+                            <div className="absolute right-3.5 top-1/2 -translate-y-1/2 flex items-center gap-1 text-cyan-400 pointer-events-none select-none">
+                              <Gem className="w-4 h-4 text-cyan-400 animate-pulse" />
+                              <span className="text-[10px] font-black">GE</span>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 mt-1">
+                            <button
+                              onClick={() => handleBulkGemsUpdate("add")}
+                              className="px-3 py-2.5 bg-[#0ea5e9] hover:bg-sky-600 active:translate-y-0.5 border-2 border-black rounded-xl text-[10px] font-black text-black tracking-wider uppercase shadow-[3px_3px_0px_rgba(0,0,0,1)] active:shadow-[1px_1px_0px_rgba(0,0,0,1)] transition-all cursor-pointer flex items-center justify-center gap-1"
+                            >
+                              <span>➕ ENVIAR A TODOS</span>
+                            </button>
+
+                            <button
+                              onClick={() => handleBulkGemsUpdate("remove")}
+                              className="px-3 py-2.5 bg-rose-600 hover:bg-rose-700 active:translate-y-0.5 border-2 border-black rounded-xl text-[10px] font-black text-white tracking-wider uppercase shadow-[3px_3px_0px_rgba(0,0,0,1)] active:shadow-[1px_1px_0px_rgba(0,0,0,1)] transition-all cursor-pointer flex items-center justify-center gap-1"
+                            >
+                              <span>➖ ELIMINAR DE TODOS</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
                       {/* Section: Direct Account Management (Secure admin power alternative) */}
                       <div className="space-y-2.5 bg-[#1f2937]/50 p-4 rounded-3xl border-2 border-slate-800 text-left">
                         <h4 className="text-[10px] uppercase font-black tracking-widest text-[#ef4444] flex items-center gap-1.5 border-b border-slate-800 pb-1 mb-2.5 font-mono">
@@ -791,10 +906,10 @@ export default function AdminPanel({
                                 </span>
                               </div>
                               <button
-                                onClick={() => handleDeleteAccountAdmin(acc.username)}
-                                className="px-2 py-1.5 bg-red-950/40 hover:bg-red-900 border-2 border-red-800 hover:border-red-600 text-red-400 hover:text-white rounded-lg text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center shrink-0"
+                                onClick={() => handleDefaultAccountAdmin(acc)}
+                                className="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 border-2 border-black text-black rounded-lg text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center shrink-0"
                               >
-                                Eliminar 🧙
+                                DEFAULT
                               </button>
                             </div>
                           ))}
