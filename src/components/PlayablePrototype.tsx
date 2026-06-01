@@ -82,6 +82,8 @@ export default function PlayablePrototype({
   const [hand, setHand] = useState<ElementSymbol[]>([]);
   const [isGameOver, setIsGameOver] = useState(false);
   const [isVictory, setIsVictory] = useState(false);
+  const [showSurrenderConfirm, setShowSurrenderConfirm] = useState(false);
+  const [surrenderConfirmDuelId, setSurrenderConfirmDuelId] = useState<string | null>(null);
   const [isSoundOn, setIsSoundOn] = useState(true);
   const [gameLog, setGameLog] = useState<string[]>(["¡Bienvenido a la Rejilla de Alquimia! Coloca elementos en el tablero para generar sinergias y oro."]);
   const [selectedHandIndex, setSelectedHandIndex] = useState<number | null>(null);
@@ -434,22 +436,31 @@ export default function PlayablePrototype({
     // Set board stats to exactly this Duel's phase setup
     const phase = duel.currentPhase;
     let phaseQuota = 30;
-    if (phase === 2) phaseQuota = 75;
+    if (phase === 1) phaseQuota = 30;
+    else if (phase === 2) phaseQuota = 75;
     else if (phase === 3) phaseQuota = 150;
     else if (phase === 4) phaseQuota = 300;
     else phaseQuota = 300 + (phase - 4) * 150;
     
+    // In duels, we must maintain gold across phases, just like in standard play mode!
+    const isChallenger = duel.challenger === activeAccount?.username;
+    let startingGold = 0;
+    if (phase > 1) {
+      startingGold = isChallenger ? (duel.challengerScores[phase - 1] || 0) : (duel.opponentScores[phase - 1] || 0);
+    }
+    
     setRound(phase);
     setQuota(phaseQuota);
-    setGold(0);
+    setGold(startingGold);
     
     const initialTurns = (activeAccount?.relics?.includes("sello") ? 7 : 6) + (hasQuantum ? 1 : 0);
     setTurnsLeft(initialTurns);
     setGrid(Array(9).fill(null));
-    setGameLog([`⚔️ ¡DUELO INICIADO contra ${duel.challenger === activeAccount?.username ? duel.opponent : duel.challenger}! Fase ${phase}. Tienes ${initialTurns} turnos. Cuota ${phaseQuota} de oro.`]);
+    setGameLog([`⚔️ ¡DUELO INICIADO contra ${duel.challenger === activeAccount?.username ? duel.opponent : duel.challenger}! Fase ${phase}. Tienes ${initialTurns} turnos. Cuota ${phaseQuota} de oro. Comienzas con ${startingGold} de oro acumulado.`]);
     setIsGameOver(false);
     setIsVictory(false);
     setIsDrafting(false);
+    setShowSurrenderConfirm(false);
     setSelectedHandIndex(null);
 
     // Prepare starter deck (shuffled)
@@ -574,6 +585,120 @@ export default function PlayablePrototype({
     }
   };
 
+  const handleSurrender = () => {
+    playSound("fail");
+    setShowSurrenderConfirm(false);
+    if (currentActiveDuel) {
+      addLog(`🏳️ ¡Te has rendido en el Duelo!`);
+      handleSaveDuelRoundResult(0); // This marks the user as eliminated, handles both played state, saves result, and resets to standard play
+    } else {
+      addLog(`❌ Has abandonado la partida (Rendición). Cuota no lograda.`);
+      setIsGameOver(true);
+      // Record user highscore if activeAccount exists
+      if (activeAccount) {
+        onUpdateScore(gold);
+      }
+    }
+  };
+
+  const handleSurrenderDuelMatchDirectly = async (duel: Duel) => {
+    if (!activeAccount) return;
+    playSound("fail");
+    
+    const isChallenger = duel.challenger === activeAccount.username;
+    const finalGold = 0;
+    const newStatus = "eliminated";
+    
+    const updatedChallengerScores = { ...duel.challengerScores };
+    const updatedOpponentScores = { ...duel.opponentScores };
+    
+    let challengerStatus = duel.challengerStatus;
+    let opponentStatus = duel.opponentStatus;
+    
+    if (isChallenger) {
+      updatedChallengerScores[duel.currentPhase] = finalGold;
+      challengerStatus = newStatus;
+    } else {
+      updatedOpponentScores[duel.currentPhase] = finalGold;
+      opponentStatus = newStatus;
+    }
+    
+    // Check if both players have played this phase
+    let nextPhase = duel.currentPhase;
+    let duelStatus = duel.status;
+    let winner = duel.winner;
+    
+    const bothPlayed = (isChallenger && opponentStatus !== "playing") || (!isChallenger && challengerStatus !== "playing");
+    
+    if (bothPlayed) {
+      const challengerScoreVal = isChallenger ? finalGold : (duel.challengerScores[duel.currentPhase] || 0);
+      const opponentScoreVal = !isChallenger ? finalGold : (duel.opponentScores[duel.currentPhase] || 0);
+      
+      const challengerPassed = challengerStatus === "passed";
+      const opponentPassed = opponentStatus === "passed";
+      
+      if (challengerPassed && !opponentPassed) {
+        duelStatus = "completed";
+        winner = duel.challenger;
+      } else if (!challengerPassed && opponentPassed) {
+        duelStatus = "completed";
+        winner = duel.opponent;
+      } else if (!challengerPassed && !opponentPassed) {
+        if (challengerScoreVal > opponentScoreVal) {
+          duelStatus = "completed";
+          winner = duel.challenger;
+        } else if (opponentScoreVal > challengerScoreVal) {
+          duelStatus = "completed";
+          winner = duel.opponent;
+        } else {
+          duelStatus = "completed";
+          winner = "tie";
+        }
+      } else {
+        nextPhase = duel.currentPhase + 1;
+        challengerStatus = "playing";
+        opponentStatus = "playing";
+      }
+    }
+    
+    const updatedDuel = {
+      ...duel,
+      currentPhase: nextPhase,
+      challengerStatus,
+      opponentStatus,
+      challengerScores: updatedChallengerScores,
+      opponentScores: updatedOpponentScores,
+      status: duelStatus,
+      winner,
+      lastUpdated: Date.now()
+    };
+    
+    try {
+      const duelRef = doc(db, "duels", duel.id);
+      await setDoc(duelRef, updatedDuel);
+      addLog(`🏳️ Te has rendido en el duelo contra ${isChallenger ? duel.opponent : duel.challenger}. Match actualizado.`);
+      
+      if (duelStatus === "completed" && winner && winner !== "tie" && winner !== "declinado") {
+        try {
+          const winnerRef = doc(db, "accounts", winner);
+          const winnerSnap = await getDoc(winnerRef);
+          if (winnerSnap.exists()) {
+            const winnerData = winnerSnap.data() as Account;
+            await updateDoc(winnerRef, {
+              etherGems: (winnerData.etherGems || 0) + 100,
+              highscore: Math.max(winnerData.highscore || 0, finalGold)
+            });
+            addLog(`🏆 ¡El Duelo Alquímico terminó! Ganador: ${winner}. Se han acreditado +100 Gemas de Éter.`);
+          }
+        } catch (error) {
+          console.error("Error rewarding winner on surrender:", error);
+        }
+      }
+    } catch (err) {
+      console.error("Error surrendering duel:", err);
+    }
+  };
+
   // Initialize a new game
   const startNewGame = () => {
     playSound("levelUp");
@@ -587,6 +712,7 @@ export default function PlayablePrototype({
     setIsGameOver(false);
     setIsVictory(false);
     setIsDrafting(false);
+    setShowSurrenderConfirm(false);
     setSelectedHandIndex(null);
 
     // Prepare deck
@@ -1443,6 +1569,52 @@ export default function PlayablePrototype({
             })}
           </div>
 
+          {/* Surrender Button / Confirmation in-game panel */}
+          {currentActiveDuel && !isGameOver && !isDrafting && (
+            <div className="mt-4 flex flex-col items-center justify-center w-full max-w-[320px] select-none z-10 animate-fade-in pb-1">
+              {!showSurrenderConfirm ? (
+                <button
+                  id="btn-surrender"
+                  onClick={() => {
+                    playSound("click");
+                    setShowSurrenderConfirm(true);
+                  }}
+                  className="px-4 py-1.5 bg-[#F43F5E] hover:bg-rose-600 text-white font-extrabold uppercase tracking-wider text-[10px] rounded-xl border-4 border-black hover:scale-105 active:translate-y-0.5 transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-[3px_3px_0px_rgba(0,0,0,1)] w-full"
+                >
+                  🏳️ Rendirse
+                </button>
+              ) : (
+                <div 
+                  id="panel-surrender-confirm"
+                  className="bg-slate-950/80 border-4 border-black rounded-2xl p-3 w-full text-center flex flex-col gap-2 items-center justify-center animate-fade-in shadow-[4px_4px_0px_rgba(0,0,0,0.5)]"
+                >
+                  <p className="text-[10px] text-rose-400 font-extrabold uppercase tracking-wide">
+                    ⚠️ ¿Seguro que quieres rendirte?
+                  </p>
+                  <div className="flex gap-2 w-full justify-center">
+                    <button
+                      id="btn-surrender-confirm"
+                      onClick={handleSurrender}
+                      className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-black uppercase text-[9px] rounded-lg border-2 border-black shadow-[1.5px_1.5px_0px_#000] active:translate-y-0.5 cursor-pointer flex-1"
+                    >
+                      Sí, Rendirme
+                    </button>
+                    <button
+                      id="btn-surrender-cancel"
+                      onClick={() => {
+                        playSound("click");
+                        setShowSurrenderConfirm(false);
+                      }}
+                      className="px-3 py-1.5 bg-slate-700 hover:bg-slate-650 text-white font-black uppercase text-[9px] rounded-lg border-2 border-black shadow-[1.5px_1.5px_0px_#000] active:translate-y-0.5 cursor-pointer flex-1"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Draft overlay screen modal */}
           {isDrafting && (
             <div className="absolute inset-0 bg-[#111827]/98 border-4 border-black rounded-[2.5rem] flex flex-col items-center justify-center p-6 z-20 text-center animate-fade-in shadow-[12px_12px_0px_rgba(0,0,0,1)]">
@@ -1487,7 +1659,7 @@ export default function PlayablePrototype({
                 onClick={handleSkipDraft}
                 className="text-xs font-black uppercase text-gray-400 hover:text-white underline underline-offset-4 cursor-pointer"
               >
-                Omitir y avanzar ronde
+                Omitir y avanzar ronda
               </button>
             </div>
           )}
@@ -2037,14 +2209,51 @@ export default function PlayablePrototype({
                                 <div className="text-center py-2 text-[11px] font-black font-mono text-yellow-400 bg-yellow-950/40 border border-yellow-800 rounded-xl animate-pulse">
                                   🎮 Duelo activo... ¡Cosecha en la Rejilla!
                                 </div>
+                              ) : surrenderConfirmDuelId === duel.id ? (
+                                <div className="bg-red-950/50 border border-red-800 rounded-xl p-2.5 flex flex-col items-center gap-2 mt-1">
+                                  <span className="text-[10px] text-rose-300 font-extrabold uppercase tracking-wide">
+                                    ⚠️ ¿Confirmas rendirte el duelo?
+                                  </span>
+                                  <div className="flex gap-2 w-full justify-center">
+                                    <button
+                                      onClick={() => {
+                                        handleSurrenderDuelMatchDirectly(duel);
+                                        setSurrenderConfirmDuelId(null);
+                                      }}
+                                      className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-black uppercase text-[9px] rounded-lg border-2 border-black cursor-pointer flex-1 text-center"
+                                    >
+                                      Sí, Rendirme
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        playSound("click");
+                                        setSurrenderConfirmDuelId(null);
+                                      }}
+                                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white font-black uppercase text-[9px] rounded-lg border-2 border-black cursor-pointer flex-1 text-center"
+                                    >
+                                      No
+                                    </button>
+                                  </div>
+                                </div>
                               ) : (
-                                <button
-                                  onClick={() => handleStartDuelRound(duel)}
-                                  className="w-full py-2 bg-[#F43F5E] text-white border-2 border-black font-black uppercase font-mono tracking-wider text-xs rounded-xl hover:bg-rose-600 transition-all cursor-pointer shadow-[3px_3px_0px_#000] active:translate-y-0.5 flex items-center justify-center gap-2 mt-1"
-                                >
-                                  <Swords className="w-3.5 h-3.5 text-yellow-300 animate-pulse" />
-                                  ¡Jugar Turno Fase {duel.currentPhase}!
-                                </button>
+                                <div className="flex flex-col gap-1.5 mt-1">
+                                  <button
+                                    onClick={() => handleStartDuelRound(duel)}
+                                    className="w-full py-2 bg-[#F43F5E] text-white border-2 border-black font-black uppercase font-mono tracking-wider text-xs rounded-xl hover:bg-rose-600 transition-all cursor-pointer shadow-[3px_3px_0px_#000] active:translate-y-0.5 flex items-center justify-center gap-2"
+                                  >
+                                    <Swords className="w-3.5 h-3.5 text-yellow-300 animate-pulse" />
+                                    ¡Jugar Turno Fase {duel.currentPhase}!
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      playSound("click");
+                                      setSurrenderConfirmDuelId(duel.id);
+                                    }}
+                                    className="w-full py-1.5 bg-red-950 hover:bg-red-900 border-2 border-black text-rose-200 font-black uppercase font-mono tracking-wider text-[10px] rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-[2px_2px_0px_#000] active:translate-y-0.5"
+                                  >
+                                    🏳️ Rendirse (Perder)
+                                  </button>
+                                </div>
                               )}
                             </div>
                           ) : (
