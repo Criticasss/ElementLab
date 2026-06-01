@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { doc, onSnapshot, updateDoc } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "./firebase";
@@ -28,6 +28,58 @@ import {
   Award,
   Megaphone
 } from "lucide-react";
+
+// Minimalist animated alchemical brand logo
+function MinimalistLogo() {
+  return (
+    <div className="relative w-12 h-12 sm:w-16 sm:h-16 flex items-center justify-center select-none scale-100 hover:scale-[1.05] transition-all duration-300 shrink-0">
+      {/* Outer spinning ring representing the cosmic wheel */}
+      <motion.div
+        animate={{ rotate: 360 }}
+        transition={{ duration: 12, repeat: Infinity, ease: "linear" }}
+        className="absolute inset-0 rounded-full border-2 border-dashed border-cyan-400/35"
+      />
+      {/* Middle pulsing counter-rotating track */}
+      <motion.div
+        animate={{ rotate: -360 }}
+        transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+        className="absolute w-[80%] h-[80%] rounded-full border border-pink-500/25"
+      >
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-cyan-400 shadow-[0_0_8px_#22D3EE]" />
+        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-pink-500 shadow-[0_0_8px_#EC4899]" />
+      </motion.div>
+      {/* Inner sacred geometry: fire/water interlocking triangles */}
+      <div className="absolute w-[50%] h-[50%] flex items-center justify-center">
+        {/* Fire Triangle (pointing up, warm amber) */}
+        <motion.div
+          animate={{ scale: [1, 1.08, 1], rotate: [0, 4, 0] }}
+          transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute inset-0 flex items-center justify-center"
+        >
+          <svg viewBox="0 0 100 100" className="w-[85%] h-[85%] text-amber-400 drop-shadow-[0_0_4px_rgba(251,191,36,0.5)] fill-none stroke-current stroke-[6] stroke-linejoin-round">
+            <polygon points="50,15 88,85 12,85" />
+          </svg>
+        </motion.div>
+        {/* Water Triangle (pointing down, cool magenta) */}
+        <motion.div
+          animate={{ scale: [1, 1.12, 1], rotate: [0, -4, 0] }}
+          transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
+          className="absolute inset-0 flex items-center justify-center"
+        >
+          <svg viewBox="0 0 100 100" className="w-[85%] h-[85%] text-pink-500 drop-shadow-[0_0_4px_rgba(236,72,153,0.5)] fill-none stroke-current stroke-[6] stroke-linejoin-round">
+            <polygon points="50,85 88,15 12,15" />
+          </svg>
+        </motion.div>
+        {/* Center essence star */}
+        <motion.div
+          animate={{ scale: [0.8, 1.25, 0.8], opacity: [0.8, 1, 0.8] }}
+          transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute w-2 h-2 rounded-full bg-white shadow-[0_0_10px_#fff]"
+        />
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<"prototype" | "catalog" | "designer" | "achievements">("prototype");
@@ -342,13 +394,21 @@ export default function App() {
 
         {/* Navigation & Header */}
         <header className="flex flex-col lg:flex-row justify-between items-start lg:items-end pb-8 border-b-4 border-black gap-6">
-          <div className="max-w-2xl">
-            <h1 className="text-4.5xl sm:text-6xl font-black text-white uppercase tracking-tighter leading-none select-none">
-              Element<span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-yellow-400">Lab</span>
-            </h1>
-            <p className="text-gray-400 mt-3 text-sm sm:text-lg font-medium leading-relaxed font-sans">
-              Combina elementos sagrados y desata poderosas fusiones para batir tus deudas y cuotas de oro.
-            </p>
+          <div className="flex items-center gap-4 max-w-2xl">
+            <MinimalistLogo />
+            <div>
+              <h1 className="text-4.5xl sm:text-6xl font-black text-white uppercase tracking-tighter leading-none select-none">
+                Element<span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-yellow-400">Lab</span>
+              </h1>
+              {/* Elegant, animated, minimalist brand slogan */}
+              <p className="text-cyan-400 text-[10px] sm:text-xs font-black tracking-widest uppercase font-mono mt-1.5 select-none flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-pink-500 animate-pulse shrink-0" />
+                Transmuta lo simple, crea lo extraordinario
+              </p>
+              <p className="text-gray-400 mt-2 text-xs sm:text-sm font-medium leading-relaxed font-sans">
+                Combina elementos sagrados y desata poderosas fusiones para batir tus deudas y cuotas de oro.
+              </p>
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto lg:justify-end">

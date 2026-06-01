@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Outer cosmic wheel -->
+  <circle cx="50" cy="50" r="45" fill="none" stroke="#22D3EE" stroke-width="4" stroke-dasharray="8,6" opacity="0.8" />
+  <!-- Water element triangle (pointing down, cool magenta) -->
+  <polygon points="50,82 85,22 15,22" fill="none" stroke="#EC4899" stroke-width="6" stroke-linejoin="round" />
+  <!-- Fire element triangle (pointing up, warm amber) -->
+  <polygon points="50,18 85,78 15,78" fill="none" stroke="#FBBF24" stroke-width="6" stroke-linejoin="round" />
+  <!-- Center essence stone -->
+  <circle cx="50" cy="50" r="6" fill="#FFFFFF" />
+</svg>
