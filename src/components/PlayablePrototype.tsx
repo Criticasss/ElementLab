@@ -1,8 +1,11 @@
 import { useState, useEffect } from "react";
-import { ElementSymbol, GameState, Rarity } from "../types";
+import { ElementSymbol, GameState, Rarity, Duel } from "../types";
 import { playSound } from "../utils/audio";
 import { Account } from "./AccountManager";
 import { motion, AnimatePresence } from "motion/react";
+import { collection, doc, setDoc, getDoc, updateDoc, onSnapshot } from "firebase/firestore";
+import { db, handleFirestoreError, OperationType } from "../firebase";
+import { Swords, LogIn, Target, ChevronDown } from "lucide-react";
 import { ACHIEVEMENTS_LIST } from "./AchievementsPanel";
 import SecondaryLabsManager from "./SecondaryLabsManager";
 import {
@@ -148,8 +151,129 @@ export default function PlayablePrototype({
     }, 2000);
   };
 
-  // Screen selector
-  const [activeScreen, setActiveScreen] = useState<"board" | "shop" | "labs">("board");
+  // Screen selector including duels arena
+  const [activeScreen, setActiveScreen] = useState<"board" | "shop" | "labs" | "duels">("board");
+
+  // Duel states
+  const [allDuels, setAllDuels] = useState<Duel[]>([]);
+  const [currentActiveDuel, setCurrentActiveDuel] = useState<Duel | null>(null);
+  const [opponentsList, setOpponentsList] = useState<string[]>([]);
+  const [selectedOpponentName, setSelectedOpponentName] = useState<string>("");
+  const [challengeMsg, setChallengeMsg] = useState<string>("");
+
+  // Listen to all duels in real-time
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "duels"), (snapshot) => {
+      try {
+        const list: Duel[] = [];
+        snapshot.forEach((doc) => {
+          list.push(doc.data() as Duel);
+        });
+        setAllDuels(list);
+      } catch (e) {
+        console.error("Error charging duels:", e);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  // Fetch registered alchemist list dynamically for challenging
+  useEffect(() => {
+    if (!activeAccount) return;
+    const unsub = onSnapshot(collection(db, "accounts"), (snapshot) => {
+      try {
+        const list: string[] = [];
+        snapshot.forEach((doc) => {
+          const accName = doc.id;
+          if (activeAccount && accName.toLowerCase() !== activeAccount.username.toLowerCase()) {
+            list.push(accName);
+          }
+        });
+        setOpponentsList(list);
+        if (list.length > 0 && !selectedOpponentName) {
+          setSelectedOpponentName(list[0]);
+        }
+      } catch (e) {
+        console.error("Error charging opponents:", e);
+      }
+    });
+    return () => unsub();
+  }, [activeAccount]);
+
+  const handleLaunchChallenge = async () => {
+    if (!activeAccount || !selectedOpponentName) {
+      playSound("fail");
+      setChallengeMsg("Selecciona un oponente válido.");
+      return;
+    }
+
+    const matchExists = allDuels.some(d => 
+      (d.status === "active" || d.status === "pending") && 
+      ((d.challenger.toLowerCase() === activeAccount.username.toLowerCase() && d.opponent.toLowerCase() === selectedOpponentName.toLowerCase()) ||
+       (d.challenger.toLowerCase() === selectedOpponentName.toLowerCase() && d.opponent.toLowerCase() === activeAccount.username.toLowerCase()))
+    );
+
+    if (matchExists) {
+      playSound("fail");
+      setChallengeMsg(`Ya existe un reto pendiente o activo con ${selectedOpponentName}.`);
+      return;
+    }
+
+    const id = `duel_${activeAccount.username}_${selectedOpponentName}_${Date.now()}`;
+    const newDuel: Duel = {
+      id,
+      challenger: activeAccount.username,
+      opponent: selectedOpponentName,
+      currentPhase: 1,
+      challengerStatus: "playing",
+      opponentStatus: "playing",
+      challengerScores: {},
+      opponentScores: {},
+      status: "pending",
+      winner: null,
+      createdAt: Date.now(),
+      lastUpdated: Date.now()
+    };
+
+    try {
+      playSound("levelUp");
+      await setDoc(doc(db, "duels", id), newDuel);
+      setChallengeMsg(`⚡ ¡Has retado a [${selectedOpponentName}]!`);
+      setTimeout(() => setChallengeMsg(""), 4000);
+    } catch (e) {
+      console.error("Error creating duel challenge:", e);
+      setChallengeMsg("Error al enviar el reto.");
+    }
+  };
+
+  const handleAcceptDuel = async (duel: Duel) => {
+    playSound("levelUp");
+    try {
+      await updateDoc(doc(db, "duels", duel.id), {
+        status: "active",
+        lastUpdated: Date.now()
+      });
+    } catch (e) {
+      console.error("Error accepting duel:", e);
+    }
+  };
+
+  const handleDeclineDuel = async (duelId: string) => {
+    playSound("click");
+    try {
+      const record = allDuels.find(d => d.id === duelId);
+      if (record) {
+        await setDoc(doc(db, "duels", duelId), {
+          ...record,
+          status: "completed",
+          winner: "declinado",
+          lastUpdated: Date.now()
+        });
+      }
+    } catch (e) {
+      console.error("Error declining duel:", e);
+    }
+  };
 
   // Activate Potion: Midas
   const usePotionMidas = () => {
@@ -302,6 +426,153 @@ export default function PlayablePrototype({
   // Drafting phase
   const [isDrafting, setIsDrafting] = useState(false);
   const [draftChoices, setDraftChoices] = useState<ElementSymbol[]>([]);
+
+  const handleStartDuelRound = (duel: Duel) => {
+    playSound("click");
+    setCurrentActiveDuel(duel);
+    
+    // Set board stats to exactly this Duel's phase setup
+    const phase = duel.currentPhase;
+    let phaseQuota = 30;
+    if (phase === 2) phaseQuota = 75;
+    else if (phase === 3) phaseQuota = 150;
+    else if (phase === 4) phaseQuota = 300;
+    else phaseQuota = 300 + (phase - 4) * 150;
+    
+    setRound(phase);
+    setQuota(phaseQuota);
+    setGold(0);
+    
+    const initialTurns = (activeAccount?.relics?.includes("sello") ? 7 : 6) + (hasQuantum ? 1 : 0);
+    setTurnsLeft(initialTurns);
+    setGrid(Array(9).fill(null));
+    setGameLog([`⚔️ ¡DUELO INICIADO contra ${duel.challenger === activeAccount?.username ? duel.opponent : duel.challenger}! Fase ${phase}. Tienes ${initialTurns} turnos. Cuota ${phaseQuota} de oro.`]);
+    setIsGameOver(false);
+    setIsVictory(false);
+    setIsDrafting(false);
+    setSelectedHandIndex(null);
+
+    // Prepare starter deck (shuffled)
+    const shuffled = [...STARTER_DECK].sort(() => Math.random() - 0.5);
+    setDeck(shuffled.slice(3));
+    setHand(shuffled.slice(0, 3));
+
+    // Move screen to board to play!
+    setActiveScreen("board");
+  };
+
+  const handleSaveDuelRoundResult = async (finalGold: number) => {
+    if (!currentActiveDuel || !activeAccount) return;
+    
+    const isChallenger = currentActiveDuel.challenger === activeAccount.username;
+    const reachedQuota = finalGold >= quota;
+    const newStatus = reachedQuota ? "passed" : "eliminated";
+    
+    const updatedChallengerScores = { ...currentActiveDuel.challengerScores };
+    const updatedOpponentScores = { ...currentActiveDuel.opponentScores };
+    
+    let challengerStatus = currentActiveDuel.challengerStatus;
+    let opponentStatus = currentActiveDuel.opponentStatus;
+    
+    if (isChallenger) {
+      updatedChallengerScores[currentActiveDuel.currentPhase] = finalGold;
+      challengerStatus = newStatus;
+    } else {
+      updatedOpponentScores[currentActiveDuel.currentPhase] = finalGold;
+      opponentStatus = newStatus;
+    }
+    
+    // Check if both players have played this phase
+    let nextPhase = currentActiveDuel.currentPhase;
+    let duelStatus = currentActiveDuel.status;
+    let winner = currentActiveDuel.winner;
+    
+    const bothPlayed = (isChallenger && opponentStatus !== "playing") || (!isChallenger && challengerStatus !== "playing");
+    
+    if (bothPlayed) {
+      // Determine outcome of this phase!
+      const challengerScoreVal = isChallenger ? finalGold : (currentActiveDuel.challengerScores[currentActiveDuel.currentPhase] || 0);
+      const opponentScoreVal = !isChallenger ? finalGold : (currentActiveDuel.opponentScores[currentActiveDuel.currentPhase] || 0);
+      
+      const challengerPassed = challengerStatus === "passed";
+      const opponentPassed = opponentStatus === "passed";
+      
+      if (challengerPassed && !opponentPassed) {
+        duelStatus = "completed";
+        winner = currentActiveDuel.challenger;
+      } else if (!challengerPassed && opponentPassed) {
+        duelStatus = "completed";
+        winner = currentActiveDuel.opponent;
+      } else if (!challengerPassed && !opponentPassed) {
+        // Both failed! Determine by highest score on this last phase
+        if (challengerScoreVal > opponentScoreVal) {
+          duelStatus = "completed";
+          winner = currentActiveDuel.challenger;
+        } else if (opponentScoreVal > challengerScoreVal) {
+          duelStatus = "completed";
+          winner = currentActiveDuel.opponent;
+        } else {
+          duelStatus = "completed";
+          winner = "tie";
+        }
+      } else {
+        // Both succeeded, escalate to next phase!
+        nextPhase = currentActiveDuel.currentPhase + 1;
+        challengerStatus = "playing";
+        opponentStatus = "playing";
+      }
+    }
+    
+    const updatedDuel = {
+      ...currentActiveDuel,
+      currentPhase: nextPhase,
+      challengerStatus,
+      opponentStatus,
+      challengerScores: updatedChallengerScores,
+      opponentScores: updatedOpponentScores,
+      status: duelStatus,
+      winner,
+      lastUpdated: Date.now()
+    };
+    
+    try {
+      playSound(reachedQuota ? "quota" : "fail");
+      
+      // Update the duel record in cloud
+      const duelRef = doc(db, "duels", currentActiveDuel.id);
+      await setDoc(duelRef, updatedDuel);
+      
+      addLog(`🚀 ¡Resultado de Duelo Guardado! Logrado: ${finalGold}/${quota} Oro [${newStatus}].`);
+      
+      // Reward 100 Éter Gems to the winner if completed
+      if (duelStatus === "completed" && winner && winner !== "tie" && winner !== "declinado") {
+        try {
+          const winnerRef = doc(db, "accounts", winner);
+          const winnerSnap = await getDoc(winnerRef);
+          if (winnerSnap.exists()) {
+            const winnerData = winnerSnap.data() as Account;
+            const currentGems = winnerData.etherGems || 0;
+            const gemsReward = 100;
+            await updateDoc(winnerRef, {
+              etherGems: currentGems + gemsReward,
+              highscore: Math.max(winnerData.highscore || 0, finalGold)
+            });
+            addLog(`🏆 ¡El Duelo Alquímico terminó! Ganador: ${winner}. Se han acreditado +${gemsReward} Gemas de Éter.`);
+          }
+        } catch (error) {
+          console.error("Error rewarding winner:", error);
+        }
+      }
+      
+      setCurrentActiveDuel(null);
+      setIsGameOver(false);
+      startNewGame(); // Reset to standard play
+      setActiveScreen("duels"); // Return to duels arena to see scores!
+    } catch (e) {
+      console.error("Error saving duel round:", e);
+      addLog("❌ Error de red al guardar el duelo en Firestore.");
+    }
+  };
 
   // Initialize a new game
   const startNewGame = () => {
@@ -790,6 +1061,11 @@ export default function PlayablePrototype({
 
     addLog(`Fin de la ronda ${round}. Cosecha pasiva de rejilla: +${extraHarvest} Oro.`);
 
+    if (currentActiveDuel) {
+      handleSaveDuelRoundResult(roundFinalGold);
+      return;
+    }
+
     if (roundFinalGold >= quota) {
       // Quota paid! Play victory sound
       playSound("quota");
@@ -1014,7 +1290,7 @@ export default function PlayablePrototype({
               : "text-gray-400 hover:text-white"
           }`}
         >
-          🔮 Rejilla de Destilación
+          🔮 Rejilla
         </button>
         <button
           onClick={() => { playSound("click"); setActiveScreen("shop"); }}
@@ -1024,7 +1300,7 @@ export default function PlayablePrototype({
               : "text-gray-400 hover:text-white"
           }`}
         >
-          🛒 Bazar de Éter y Reliquias
+          🛒 Bazar
         </button>
         <button
           onClick={() => { playSound("click"); setActiveScreen("labs"); }}
@@ -1034,7 +1310,23 @@ export default function PlayablePrototype({
               : "text-gray-400 hover:text-[#D946EF]"
           }`}
         >
-          🧪 Lab Secundario
+          🧪 Lab
+        </button>
+        <button
+          onClick={() => { playSound("click"); setActiveScreen("duels"); }}
+          className={`flex-1 py-3 px-4 rounded-xl font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer relative ${
+            activeScreen === "duels"
+              ? "bg-[#F43F5E] text-white border-2 border-black shadow-[3px_3px_0px_rgba(0,0,0,1)] scale-[1.01]"
+              : "text-gray-400 hover:text-[#F43F5E]"
+          }`}
+        >
+          <Swords className="w-3.5 h-3.5 shrink-0" />
+          <span>Duelos</span>
+          {activeAccount && allDuels.filter(d => d.status === "pending" && d.opponent.toLowerCase() === activeAccount.username.toLowerCase()).length > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 w-4.5 h-4.5 bg-yellow-400 text-black font-black flex items-center justify-center rounded-full text-[9px] border border-black animate-bounce shrink-0">
+              !
+            </span>
+          )}
         </button>
       </div>
 
@@ -1630,6 +1922,270 @@ export default function PlayablePrototype({
           mainGold={gold}
           setMainGold={setGold}
         />
+      )}
+
+      {activeScreen === "duels" && (
+        <div className="flex flex-col gap-6 max-w-4xl mx-auto select-none font-sans">
+          {/* Header banner */}
+          <div className="bg-gradient-to-r from-red-950 to-slate-900 border-4 border-black rounded-3xl p-6 relative overflow-hidden shadow-[6px_6px_0px_rgba(0,0,0,0.5)]">
+            <div className="absolute top-0 right-0 transform translate-x-8 -translate-y-4 text-9xl opacity-10">⚔️</div>
+            <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div>
+                <h2 className="text-2xl font-black text-rose-500 uppercase font-mono tracking-tight flex items-center gap-2">
+                  <Swords className="w-6 h-6 text-yellow-500 animate-pulse" />
+                  Arena de Duelos Alquímicos
+                </h2>
+                <p className="text-xs text-rose-200/80 font-mono mt-1 leading-relaxed">
+                  Enfréntate a otros Alquimistas activos por turnos. Cosechen y superen las mismas fases, ¡el sobreviviente levanta la copa!
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Current ongoing matches / challenges received */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Retos y Desafíos */}
+            <div className="bg-[#111827]/80 border-4 border-black rounded-[2rem] p-6 shadow-[5px_5px_0px_#000]">
+              <h3 className="text-sm font-black text-yellow-400 uppercase tracking-wider font-mono mb-4 flex items-center gap-2 border-b-2 border-dashed border-slate-800 pb-2">
+                ⚔️ ENFRENTAMIENTOS EN VIVO
+              </h3>
+
+              {activeAccount ? (
+                <div className="flex flex-col gap-3">
+                  {allDuels.filter(d => 
+                    (d.status === "active" || d.status === "pending") &&
+                    (d.challenger.toLowerCase() === activeAccount.username.toLowerCase() || 
+                     d.opponent.toLowerCase() === activeAccount.username.toLowerCase())
+                  ).map((duel) => {
+                    const isChallenger = duel.challenger.toLowerCase() === activeAccount.username.toLowerCase();
+                    const opponent = isChallenger ? duel.opponent : duel.challenger;
+                    const isPending = duel.status === "pending";
+                    
+                    const myStatus = isChallenger ? duel.challengerStatus : duel.opponentStatus;
+                    const opponentStatus = isChallenger ? duel.opponentStatus : duel.challengerStatus;
+                    
+                    // It is my turn to play if status is "playing"
+                    const isMyTurn = myStatus === "playing";
+                    
+                    return (
+                      <div key={duel.id} className="border-4 border-black bg-slate-900 rounded-2xl p-4 flex flex-col gap-3 shadow-[2px_2px_0px_#000]">
+                        <div className="flex justify-between items-center bg-slate-950 p-2 rounded-xl border border-slate-800">
+                          <span className="text-xs font-black font-mono text-pink-400">
+                            🆚 Rival: <span className="text-white bg-pink-900/50 px-2 py-0.5 rounded-md border border-pink-700">{opponent}</span>
+                          </span>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#10B981] text-black font-black uppercase">
+                            Fase {duel.currentPhase}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4 text-center font-mono my-1 bg-black/30 p-2.5 rounded-xl border border-slate-800/40">
+                          <div>
+                            <div className="text-[9px] uppercase font-bold text-gray-400">Tú ({activeAccount.username})</div>
+                            <div className={`text-xs font-black mt-1 uppercase ${
+                              myStatus === "passed" ? "text-emerald-400" : myStatus === "eliminated" ? "text-rose-500" : "text-amber-400"
+                            }`}>
+                              {myStatus === "passed" ? "Aprobado ✅" : myStatus === "eliminated" ? "Eliminado ❌" : "Pendiente ⏳"}
+                            </div>
+                            {duel.challengerScores[duel.currentPhase] !== undefined && isChallenger && (
+                              <div className="text-[10px] text-gray-400 font-mono mt-0.5">{duel.challengerScores[duel.currentPhase]} Oro</div>
+                            )}
+                            {duel.opponentScores[duel.currentPhase] !== undefined && !isChallenger && (
+                              <div className="text-[10px] text-gray-400 font-mono mt-0.5">{duel.opponentScores[duel.currentPhase]} Oro</div>
+                            )}
+                          </div>
+                          <div>
+                            <div className="text-[9px] uppercase font-bold text-gray-400">Rival ({opponent})</div>
+                            <div className={`text-xs font-black mt-1 uppercase ${
+                              opponentStatus === "passed" ? "text-emerald-400" : opponentStatus === "eliminated" ? "text-rose-500" : "text-amber-400"
+                            }`}>
+                              {opponentStatus === "passed" ? "Aprobado ✅" : opponentStatus === "eliminated" ? "Eliminado ❌" : "Pendiente ⏳"}
+                            </div>
+                            {duel.opponentScores[duel.currentPhase] !== undefined && isChallenger && (
+                              <div className="text-[10px] text-gray-400 font-mono mt-0.5">{duel.opponentScores[duel.currentPhase]} Oro</div>
+                            )}
+                            {duel.challengerScores[duel.currentPhase] !== undefined && !isChallenger && (
+                              <div className="text-[10px] text-gray-400 font-mono mt-0.5">{duel.challengerScores[duel.currentPhase]} Oro</div>
+                            )}
+                          </div>
+                        </div>
+
+                        {isPending ? (
+                          isChallenger ? (
+                            <div className="text-center py-1.5 text-[11px] font-mono text-gray-400 bg-slate-950/50 rounded-xl border border-slate-800">
+                              Esperando aceptación de {opponent}...
+                            </div>
+                          ) : (
+                            <div className="flex gap-2 w-full mt-1">
+                              <button
+                                onClick={() => handleAcceptDuel(duel)}
+                                className="flex-1 py-2 bg-[#10B981] text-white border-2 border-black font-black uppercase font-mono tracking-wider text-[11px] rounded-xl hover:bg-emerald-600 transition-all cursor-pointer shadow-[2px_2px_0px_#000] active:translate-y-0.5"
+                              >
+                                Aceptar
+                              </button>
+                              <button
+                                onClick={() => handleDeclineDuel(duel.id)}
+                                className="py-2 px-3 bg-red-950 text-rose-200 border-2 border-black font-black uppercase font-mono text-[11px] rounded-xl hover:bg-red-950 transition-all cursor-pointer"
+                              >
+                                Rechazar
+                              </button>
+                            </div>
+                          )
+                        ) : (
+                          isMyTurn ? (
+                            <div>
+                              {currentActiveDuel?.id === duel.id ? (
+                                <div className="text-center py-2 text-[11px] font-black font-mono text-yellow-400 bg-yellow-950/40 border border-yellow-800 rounded-xl animate-pulse">
+                                  🎮 Duelo activo... ¡Cosecha en la Rejilla!
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => handleStartDuelRound(duel)}
+                                  className="w-full py-2 bg-[#F43F5E] text-white border-2 border-black font-black uppercase font-mono tracking-wider text-xs rounded-xl hover:bg-rose-600 transition-all cursor-pointer shadow-[3px_3px_0px_#000] active:translate-y-0.5 flex items-center justify-center gap-2 mt-1"
+                                >
+                                  <Swords className="w-3.5 h-3.5 text-yellow-300 animate-pulse" />
+                                  ¡Jugar Turno Fase {duel.currentPhase}!
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="text-center py-2 text-[11px] font-mono text-amber-300 bg-amber-950/20 border border-amber-900/40 rounded-xl">
+                              ⏳ Esperando turno del rival para resolver...
+                            </div>
+                          )
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {allDuels.filter(d => 
+                    (d.status === "active" || d.status === "pending") &&
+                    (d.challenger.toLowerCase() === activeAccount.username.toLowerCase() || 
+                     d.opponent.toLowerCase() === activeAccount.username.toLowerCase())
+                  ).length === 0 && (
+                    <div className="text-center py-8 text-gray-500 font-mono text-xs border-2 border-dashed border-slate-800 rounded-2xl bg-slate-950/50">
+                      🛡️ No tienes enfrentamientos en curso.<br />
+                      ¡Reta a un alchemist para iniciar la contienda!
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-6 text-gray-500 font-mono text-xs">
+                  Inicia sesión para ver tu historial y participar en duelos.
+                </div>
+              )}
+            </div>
+
+            {/* Reta a otros Alquimistas */}
+            <div className="bg-[#111827]/80 border-4 border-black rounded-[2rem] p-6 shadow-[5px_5px_0px_#000] flex flex-col justify-between">
+              <div>
+                <h3 className="text-sm font-black text-rose-400 uppercase tracking-wider font-mono mb-4 flex items-center gap-2 border-b-2 border-dashed border-slate-800 pb-2">
+                  🗡️ DESAFIAR AL ALQUIMISTA
+                </h3>
+                
+                <p className="text-xs text-gray-400 font-mono leading-relaxed mb-4">
+                  Selecciona de la lista un alchemist activo para enviarle una propuesta de enfrentamiento. Se notificará a tu adversario al instante.
+                </p>
+
+                <div className="space-y-4 my-2">
+                  <div>
+                    <label className="text-[10px] text-pink-500 font-black uppercase font-mono block mb-1.5">
+                      ⚔️ SELECCIONAR ALQUIMISTA RIVAL:
+                    </label>
+                    <div className="flex gap-2">
+                      <select
+                        value={selectedOpponentName}
+                        onChange={(e) => setSelectedOpponentName(e.target.value)}
+                        className="flex-1 bg-slate-950 text-white font-mono text-xs rounded-xl p-3 border-2 border-black outline-none focus:border-rose-500 cursor-pointer"
+                      >
+                        {opponentsList.map((opp) => (
+                          <option key={opp} value={opp}>
+                            🔮 {opp}
+                          </option>
+                        ))}
+                        {opponentsList.length === 0 && (
+                          <option value="">No hay otros oponentes registrados</option>
+                        )}
+                      </select>
+                      
+                      <button
+                        onClick={handleLaunchChallenge}
+                        disabled={opponentsList.length === 0}
+                        className={`px-5 py-3 font-black uppercase tracking-wider font-mono text-xs text-black border-2 border-black rounded-xl transition-all shadow-[2px_2px_0px_#000] active:translate-y-0.5 shrink-0 ${
+                          opponentsList.length === 0 
+                            ? "bg-slate-800 text-gray-600 border-gray-900 cursor-not-allowed" 
+                            : "bg-[#F59E0B] hover:bg-amber-500 cursor-pointer"
+                        }`}
+                      >
+                        RETAR ⚔️
+                      </button>
+                    </div>
+                  </div>
+
+                  {challengeMsg && (
+                    <div className="font-mono text-xs p-3 bg-red-950/50 border border-rose-800 text-pink-300 rounded-xl text-center font-bold">
+                      {challengeMsg}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-6 border-t-2 border-dashed border-slate-800/80 pt-4 text-[10px] text-gray-500 font-mono flex flex-col gap-1 leading-relaxed">
+                <span>💡 **Estructura y Reglas del Duelo**:</span>
+                <span>• Se disputa sincronizado por turnos: los dos juegan la Fase actual en la Rejilla de forma independiente.</span>
+                <span>• Si superas la cuota de oro y tu oponente no, ¡ganas inmediatamente!</span>
+                <span>• Si ambos fracasan, ganará quien tenga la mayor cantidad de oro absoluto cosechada.</span>
+                <span>• ¡El vencedor absoluto recibe un botín de 💎 +100 Gemas de Éter!</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Historial completado de duelos */}
+          <div className="bg-[#111827]/80 border-4 border-black rounded-[2rem] p-6 shadow-[5px_5px_0px_#000]">
+            <h3 className="text-sm font-black text-rose-500 uppercase tracking-wider font-mono mb-4 flex items-center gap-2 border-b-2 border-dashed border-slate-800 pb-2">
+              🏆 SALÓN DE GLORIA Y VICTORIAS ALQUÍMICAS
+            </h3>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              {allDuels.filter(d => d.status === "completed").map((duel) => {
+                const isWinner = activeAccount && duel.winner === activeAccount.username;
+                const isTie = duel.winner === "tie";
+                const isDeclinado = duel.winner === "declinado";
+                
+                return (
+                  <div key={duel.id} className="bg-slate-900 border-2 border-slate-800 rounded-2xl p-4 flex flex-col gap-2 font-mono text-xs relative overflow-hidden">
+                    <div className="flex justify-between items-center text-[10px] text-gray-400">
+                      <span>Rondas jugadas: {duel.currentPhase}</span>
+                      <span className="uppercase text-[9px] px-1.5 py-0.5 bg-slate-955 rounded border border-slate-800 font-bold">Resuelto</span>
+                    </div>
+
+                    <div className="text-xs font-black text-white py-1">
+                      ⚔️ {duel.challenger} contra {duel.opponent}
+                    </div>
+
+                    <div className="bg-slate-950 p-2 rounded-xl border border-slate-800 text-center mt-1">
+                      {isDeclinado ? (
+                        <span className="text-gray-500 font-bold italic">Desafío Declinado ❌</span>
+                      ) : isTie ? (
+                        <span className="text-amber-400 font-black">Empate Técnico 🤝</span>
+                      ) : (
+                        <div>
+                          <span className="text-gray-400 text-[9px] block">CROWNED VICTOR:</span>
+                          <span className="text-yellow-400 block uppercase tracking-tight font-black text-xs">👑 {duel.winner}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {allDuels.filter(d => d.status === "completed").length === 0 && (
+                <div className="col-span-full text-center py-6 text-gray-500 font-mono text-xs">
+                  Aún no hay batallas registradas en el Salón de la Gloria.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

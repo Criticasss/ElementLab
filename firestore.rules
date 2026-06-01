@@ -7,11 +7,11 @@ service cloud.firestore {
     }
 
     function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-\\.\\s@#]+$');
     }
 
     function isValidUsernameId(id) {
-      return id is string && id.size() >= 1 && id.size() <= 30;
+      return id is string && id.size() >= 1 && id.size() <= 40;
     }
 
     function isValidBroadcast(data) {
@@ -24,7 +24,7 @@ service cloud.firestore {
 
     function isValidAccount(data) {
       return data.keys().hasAll(['username', 'password', 'highscore', 'gamesPlayed'])
-        && data.username is string && data.username.size() <= 30
+        && data.username is string && data.username.size() <= 40
         && data.password is string && data.password.size() <= 100
         && data.highscore is int
         && data.gamesPlayed is int
@@ -40,6 +40,18 @@ service cloud.firestore {
         && (!data.keys().hasAny(['gemsValue']) || data.gemsValue is int)
         && (!data.keys().hasAny(['potionsValue']) || data.potionsValue is int)
         && (!data.keys().hasAny(['isActive']) || data.isActive is bool);
+    }
+
+    function isValidDuel(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.challenger is string && data.challenger.size() <= 40
+        && data.opponent is string && data.opponent.size() <= 40
+        && data.currentPhase is int
+        && data.challengerStatus is string && (data.challengerStatus == 'playing' || data.challengerStatus == 'passed' || data.challengerStatus == 'eliminated')
+        && data.opponentStatus is string && (data.opponentStatus == 'playing' || data.opponentStatus == 'passed' || data.opponentStatus == 'eliminated')
+        && data.status is string && (data.status == 'pending' || data.status == 'active' || data.status == 'completed')
+        && data.createdAt is int
+        && data.lastUpdated is int;
     }
 
     match /broadcasts/{broadcastId} {
@@ -58,6 +70,12 @@ service cloud.firestore {
       allow get, list: if true;
       allow create, update: if isValidId(code) && isValidPromoCode(request.resource.data);
       allow delete: if isValidId(code);
+    }
+
+    match /duels/{duelId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(duelId) && isValidDuel(request.resource.data);
+      allow delete: if isValidId(duelId);
     }
   }
 }

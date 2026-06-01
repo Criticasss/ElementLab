@@ -51,6 +51,27 @@ export default function AdminPanel({
   const [allAccounts, setAllAccounts] = useState<Account[]>([]);
   const [gemsAmountInput, setGemsAmountInput] = useState<string>("");
   const [promoCodes, setPromoCodes] = useState<any[]>([]);
+  const [allDuels, setAllDuels] = useState<any[]>([]);
+  const [duelChallengerInput, setDuelChallengerInput] = useState<string>("");
+  const [duelOpponentInput, setDuelOpponentInput] = useState<string>("");
+
+  // Listen to all duels when authenticated
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setAllDuels([]);
+      return;
+    }
+    const unsub = onSnapshot(collection(db, "duels"), (snapshot) => {
+      const list: any[] = [];
+      snapshot.forEach((doc) => {
+        list.push(doc.data());
+      });
+      setAllDuels(list);
+    }, (error) => {
+      console.error("Error subscribing to duels in AdminPanel:", error);
+    });
+    return () => unsub();
+  }, [isAuthenticated]);
   const [newPromoCode, setNewPromoCode] = useState<string>("");
   const [newPromoRewardType, setNewPromoRewardType] = useState<"gems" | "potions" | "all_relics">("gems");
   const [newPromoGemsValue, setNewPromoGemsValue] = useState<string>("500");
@@ -458,6 +479,57 @@ export default function AdminPanel({
     } catch (e) {
       handleFirestoreError(e, OperationType.DELETE, `promo_codes/${code}`);
       setStatusLog("Error al eliminar el código de regalo.");
+    }
+  };
+
+  const handleCreateForcedDuel = async () => {
+    if (!duelChallengerInput || !duelOpponentInput) {
+      playSound("fail");
+      setStatusLog("Error: Selecciona dos jugadores diferentes.");
+      return;
+    }
+    if (duelChallengerInput.toLowerCase() === duelOpponentInput.toLowerCase()) {
+      playSound("fail");
+      setStatusLog("Error: Un jugador no puede enfrentarse a sí mismo.");
+      return;
+    }
+
+    const id = `duel_${duelChallengerInput}_${duelOpponentInput}_${Date.now()}`;
+    const payload = {
+      id,
+      challenger: duelChallengerInput,
+      opponent: duelOpponentInput,
+      currentPhase: 1,
+      challengerStatus: "playing",
+      opponentStatus: "playing",
+      challengerScores: {},
+      opponentScores: {},
+      status: "active",
+      winner: null,
+      createdAt: Date.now(),
+      lastUpdated: Date.now()
+    };
+
+    try {
+      playSound("levelUp");
+      await setDoc(doc(db, "duels", id), payload);
+      setStatusLog(`⚔️ ¡Enfrentamiento creado en la nube! [${duelChallengerInput}] vs [${duelOpponentInput}]`);
+      setDuelChallengerInput("");
+      setDuelOpponentInput("");
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, `duels/${id}`);
+      setStatusLog("Error al crear el enfrentamiento celestial.");
+    }
+  };
+
+  const handleDeleteDuel = async (duelId: string) => {
+    playSound("click");
+    try {
+      await deleteDoc(doc(db, "duels", duelId));
+      setStatusLog(`Duelo disuelto en la nube.`);
+    } catch (e) {
+      handleFirestoreError(e, OperationType.DELETE, `duels/${duelId}`);
+      setStatusLog("Error al disolver duelo.");
     }
   };
 
@@ -1142,6 +1214,85 @@ export default function AdminPanel({
                               Cargando alquimistas de la nube...
                             </div>
                           )}
+                        </div>
+                      </div>
+
+                      {/* Section: SINDICATO DE DUELOS ALQUÍMICOS */}
+                      <div className="space-y-3 bg-[#1f2937]/50 p-4 rounded-3xl border-2 border-slate-800 text-left">
+                        <h4 className="text-[10px] uppercase font-black tracking-widest text-rose-500 flex items-center gap-1.5 border-b border-slate-800 pb-1 mb-2.5 font-mono">
+                          ⚔️ PROGRAMAR ENFRENTAMIENTO DE ALQUIMISTAS (DUELO)
+                        </h4>
+                        <p className="text-[10px] text-gray-400 font-semibold mb-2 leading-tight font-mono">
+                          // Selecciona dos alchemist diferentes de la lista y crea un duelo asíncrono asignado instantáneamente:
+                        </p>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="flex flex-col gap-1">
+                            <label className="text-[9px] uppercase font-bold text-gray-500 font-mono">Alquimista A</label>
+                            <select
+                              value={duelChallengerInput}
+                              onChange={(e) => setDuelChallengerInput(e.target.value)}
+                              className="w-full bg-black border border-slate-800 rounded-xl text-xs font-black p-2 text-white outline-none font-mono cursor-pointer"
+                            >
+                              <option value="">Selección...</option>
+                              {allAccounts.map((acc) => (
+                                <option key={acc.username} value={acc.username}>🛡️ {acc.username}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="flex flex-col gap-1">
+                            <label className="text-[9px] uppercase font-bold text-gray-500 font-mono">Alquimista B</label>
+                            <select
+                              value={duelOpponentInput}
+                              onChange={(e) => setDuelOpponentInput(e.target.value)}
+                              className="w-full bg-black border border-slate-800 rounded-xl text-xs font-black p-2 text-white outline-none font-mono cursor-pointer"
+                            >
+                              <option value="">Selección...</option>
+                              {allAccounts.map((acc) => (
+                                <option key={acc.username} value={acc.username}>🛡️ {acc.username}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={handleCreateForcedDuel}
+                          className="w-full py-2.5 bg-[#F43F5E] hover:bg-rose-600 text-white font-black text-[10px] uppercase tracking-wider rounded-xl border-2 border-black shadow-[3px_3px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-[1px_1px_0px_rgba(0,0,0,1)] transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                        >
+                          Lanzar Duelo de Titanes 💥
+                        </button>
+
+                        <div className="pt-2">
+                          <label className="text-[9px] uppercase font-bold text-gray-500 font-mono block mb-1.5">// Duelos Registrados ({allDuels.length})</label>
+                          <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
+                            {allDuels.map((duelObj) => (
+                              <div
+                                key={duelObj.id}
+                                className="bg-black/40 border border-slate-850 p-2 rounded-xl flex items-center justify-between gap-3 font-mono text-xs"
+                              >
+                                <div className="truncate text-left text-white max-w-[70%]">
+                                  <span className="font-extrabold text-rose-400 block truncate">
+                                    ⚔️ {duelObj.challenger} vs {duelObj.opponent}
+                                  </span>
+                                  <span className="text-[9px] text-gray-450 font-semibold block mt-0.5">
+                                    Fase {duelObj.currentPhase} • Turno: {duelObj.challengerStatus === "playing" ? duelObj.challenger : duelObj.opponent}  • {duelObj.status} {duelObj.winner && `(Winner: ${duelObj.winner})`}
+                                  </span>
+                                </div>
+                                <button
+                                  onClick={() => handleDeleteDuel(duelObj.id)}
+                                  className="px-2 py-1 bg-red-950/45 border border-red-500/40 hover:bg-red-900 override-btn text-red-400 rounded text-[9px] font-black uppercase transition-all cursor-pointer shrink-0"
+                                >
+                                  DISOLVER
+                                </button>
+                              </div>
+                            ))}
+                            {allDuels.length === 0 && (
+                              <div className="text-center py-3 text-[10px] text-gray-500 italic">
+                                Alquimistas viviendo en paz territorial.
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
 

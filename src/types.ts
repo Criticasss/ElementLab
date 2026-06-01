@@ -110,3 +110,19 @@ export const GAME_CONCEPTS_LIST: DesignBlueprint[] = [
     uxPolishSecret: "Filtros de video retro VHS retroalimentados cromáticamente cuando estás en bucle temporal, transiciones de sonido reversas (rewind audio)."
   }
 ];
+
+export interface Duel {
+  id: string;
+  challenger: string;
+  opponent: string;
+  currentPhase: number;
+  challengerStatus: "playing" | "passed" | "eliminated";
+  opponentStatus: "playing" | "passed" | "eliminated";
+  challengerScores: { [phase: number]: number };
+  opponentScores: { [phase: number]: number };
+  status: "pending" | "active" | "completed";
+  winner: string | null; // username of player, 'tie', or null if in progress
+  createdAt: number;
+  lastUpdated: number;
+}
+

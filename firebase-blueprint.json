@@ -49,6 +49,26 @@
         "isActive": { "type": "boolean" }
       },
       "required": ["code", "rewardType", "createdAt"]
+    },
+    "duel": {
+      "title": "Alchemical Duel Match",
+      "description": "A turn-based matchup between two player accounts detailing scores, statuses, and winners",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "challenger": { "type": "string" },
+        "opponent": { "type": "string" },
+        "currentPhase": { "type": "integer" },
+        "challengerStatus": { "type": "string", "enum": ["playing", "passed", "eliminated"] },
+        "opponentStatus": { "type": "string", "enum": ["playing", "passed", "eliminated"] },
+        "challengerScores": { "type": "object" },
+        "opponentScores": { "type": "object" },
+        "status": { "type": "string", "enum": ["pending", "active", "completed"] },
+        "winner": { "type": "string" },
+        "createdAt": { "type": "integer" },
+        "lastUpdated": { "type": "integer" }
+      },
+      "required": ["id", "challenger", "opponent", "currentPhase", "challengerStatus", "opponentStatus", "status", "createdAt", "lastUpdated"]
     }
   },
   "firestore": {
@@ -63,6 +83,10 @@
     "/promo_codes/{code}": {
       "schema": "promo_code",
       "description": "Gift promo codes generated for promotional campaigns."
+    },
+    "/duels/{duelId}": {
+      "schema": "duel",
+      "description": "Turn-based dual challenges arranged between two alchemist accounts."
     }
   }
 }
