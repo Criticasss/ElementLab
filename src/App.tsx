@@ -12,7 +12,7 @@ import AlchemicalEclipseEvent from "./components/AlchemicalEclipseEvent";
 import AdminPanel from "./components/AdminPanel";
 import AnnouncementsModal from "./components/AnnouncementsModal";
 import { ElementSymbol } from "./types";
-import { toggleSound, playSound } from "./utils/audio";
+import { toggleSound, playSound, startBackgroundMusic, stopBackgroundMusic } from "./utils/audio";
 import {
   Sparkles,
   HelpCircle,
@@ -105,6 +105,30 @@ export default function App() {
     }, remaining);
     return () => clearTimeout(timer);
   }, [globalBroadcast]);
+
+  // Background music trigger on first user interaction gesture
+  useEffect(() => {
+    const initMusic = () => {
+      if (isSoundOn) {
+        startBackgroundMusic();
+      }
+      window.removeEventListener("click", initMusic);
+      window.removeEventListener("touchend", initMusic);
+      window.removeEventListener("keydown", initMusic);
+    };
+    if (isSoundOn) {
+      window.addEventListener("click", initMusic);
+      window.addEventListener("touchend", initMusic);
+      window.addEventListener("keydown", initMusic);
+    } else {
+      stopBackgroundMusic();
+    }
+    return () => {
+      window.removeEventListener("click", initMusic);
+      window.removeEventListener("touchend", initMusic);
+      window.removeEventListener("keydown", initMusic);
+    };
+  }, [isSoundOn]);
 
   const handleUnlockCard = (newCard: ElementSymbol) => {
     setCustomUnlockedCards((prev) => [...prev, newCard]);

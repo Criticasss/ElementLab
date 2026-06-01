@@ -21,7 +21,9 @@ import {
   Flame,
   Waves,
   Trees,
-  Gem
+  Gem,
+  Ticket,
+  Gift
 } from "lucide-react";
 
 interface AdminPanelProps {
@@ -48,6 +50,11 @@ export default function AdminPanel({
   const [broadcastInput, setBroadcastInput] = useState<string>("");
   const [allAccounts, setAllAccounts] = useState<Account[]>([]);
   const [gemsAmountInput, setGemsAmountInput] = useState<string>("");
+  const [promoCodes, setPromoCodes] = useState<any[]>([]);
+  const [newPromoCode, setNewPromoCode] = useState<string>("");
+  const [newPromoRewardType, setNewPromoRewardType] = useState<"gems" | "potions" | "all_relics">("gems");
+  const [newPromoGemsValue, setNewPromoGemsValue] = useState<string>("500");
+  const [newPromoPotionsValue, setNewPromoPotionsValue] = useState<string>("10");
   const broadcastTimeoutRef = useRef<any>(null);
 
   // Clean up any pending broadcast automatic clear timer on unmount
@@ -73,6 +80,24 @@ export default function AdminPanel({
       setAllAccounts(list);
     }, (error) => {
       console.error("Error subscribiendo a cuentas de admin:", error);
+    });
+    return () => unsub();
+  }, [isAuthenticated]);
+
+  // Listen to all promo_codes when authenticated
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setPromoCodes([]);
+      return;
+    }
+    const unsub = onSnapshot(collection(db, "promo_codes"), (snapshot) => {
+      const list: any[] = [];
+      snapshot.forEach((doc) => {
+        list.push(doc.data());
+      });
+      setPromoCodes(list);
+    }, (error) => {
+      console.error("Error subscribing to promo codes:", error);
     });
     return () => unsub();
   }, [isAuthenticated]);
@@ -299,6 +324,31 @@ export default function AdminPanel({
     }
   };
 
+  const handleDeleteAccount = async (username: string) => {
+    if (activeAccount && activeAccount.username === username) {
+      playSound("fail");
+      setStatusLog("Error: No puedes eliminar la cuenta que tienes activa en tu sesión.");
+      return;
+    }
+    if (username.toLowerCase() === "default") {
+      playSound("fail");
+      setStatusLog("Error: La cuenta 'default' está protegida y no se puede eliminar.");
+      return;
+    }
+
+    const confirmDelete = window.confirm(`¿Estás seguro de que quieres eliminar permanentemente la cuenta de [${username}] de la base de datos celestial?`);
+    if (!confirmDelete) return;
+
+    playSound("click");
+    try {
+      await deleteDoc(doc(db, "accounts", username));
+      setStatusLog(`Cuenta [${username}] eliminada permanentemente.`);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `accounts/${username}`);
+      setStatusLog(`Error al intentar eliminar la cuenta ${username}.`);
+    }
+  };
+
   const handleBulkGemsUpdate = async (action: "add" | "remove") => {
     const amount = parseInt(gemsAmountInput.trim(), 10);
     if (isNaN(amount) || amount <= 0) {
@@ -347,6 +397,67 @@ export default function AdminPanel({
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, "accounts/bulk_gems_update");
       setStatusLog("Error al propagar gemas en la nube de ElementLab.");
+    }
+  };
+
+  const handleCreatePromoCode = async () => {
+    const rawCode = newPromoCode.trim().toUpperCase();
+    if (!rawCode) {
+      playSound("fail");
+      setStatusLog("Error: El código promocional no puede estar vacío.");
+      return;
+    }
+    // Code validation for id requirements
+    if (!/^[a-zA-Z0-9_-]+$/.test(rawCode)) {
+      playSound("fail");
+      setStatusLog("Error: El código contiene caracteres inválidos. Solo letras, números, '-' o '_'.");
+      return;
+    }
+
+    const payload: any = {
+      code: rawCode,
+      rewardType: newPromoRewardType,
+      createdAt: Date.now(),
+      isActive: true
+    };
+
+    if (newPromoRewardType === "gems") {
+      const gVal = parseInt(newPromoGemsValue, 10);
+      if (isNaN(gVal) || gVal <= 0) {
+        playSound("fail");
+        setStatusLog("Error: Cantidad de gemas inválida.");
+        return;
+      }
+      payload.gemsValue = gVal;
+    } else if (newPromoRewardType === "potions") {
+      const pVal = parseInt(newPromoPotionsValue, 10);
+      if (isNaN(pVal) || pVal <= 0) {
+        playSound("fail");
+        setStatusLog("Error: Cantidad de pociones inválida.");
+        return;
+      }
+      payload.potionsValue = pVal;
+    }
+
+    try {
+      playSound("levelUp");
+      await setDoc(doc(db, "promo_codes", rawCode), payload);
+      setStatusLog(`Código de Regalo [${rawCode}] creado con éxito.`);
+      setNewPromoCode("");
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, `promo_codes/${rawCode}`);
+      setStatusLog("Error al guardar el código de regalo en la nube.");
+    }
+  };
+
+  const handleDeletePromoCode = async (code: string) => {
+    playSound("click");
+    try {
+      await deleteDoc(doc(db, "promo_codes", code));
+      setStatusLog(`Código [${code}] eliminado / expirado.`);
+    } catch (e) {
+      handleFirestoreError(e, OperationType.DELETE, `promo_codes/${code}`);
+      setStatusLog("Error al eliminar el código de regalo.");
     }
   };
 
@@ -882,6 +993,109 @@ export default function AdminPanel({
                         </div>
                       </div>
 
+                      {/* Section: Gift Promo Code Generator (Gift Code Factory) */}
+                      <div className="space-y-3 bg-[#1f2937]/50 p-4 rounded-3xl border-2 border-slate-800 text-left">
+                        <h4 className="text-[10px] uppercase font-black tracking-widest text-amber-400 flex items-center gap-1.5 border-b border-slate-800 pb-1 mb-2 font-mono">
+                          🎫 FÁBRICA DE CÓDIGOS DE REGALO
+                        </h4>
+                        <p className="text-[10px] text-gray-400 font-semibold mb-2 leading-tight">
+                          Genera cupones que los alquimistas pueden canjear en sus perfiles para obtener beneficios instantáneos en la nube:
+                        </p>
+
+                        <div className="flex flex-col gap-2 bg-black/30 p-2.5 rounded-2xl border border-slate-850">
+                          {/* Code Input */}
+                          <div className="flex flex-col gap-1">
+                            <label className="text-[9px] uppercase font-bold text-gray-500 font-mono">Código Cupón (Solo letras/num)</label>
+                            <input
+                              type="text"
+                              value={newPromoCode}
+                              onChange={(e) => setNewPromoCode(e.target.value.replace(/[^a-zA-Z0-9_-]/g, ""))}
+                              placeholder="Ej: ALQUIMIA2026..."
+                              className="w-full bg-black border border-slate-800 rounded-xl text-xs font-black p-2.5 text-white placeholder-gray-600 focus:outline-none focus:border-amber-400 font-mono uppercase"
+                            />
+                          </div>
+
+                          {/* Reward Type Selector */}
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[9px] uppercase font-bold text-gray-500 font-mono">Tipo Recompensa</label>
+                              <select
+                                value={newPromoRewardType}
+                                onChange={(e) => setNewPromoRewardType(e.target.value as any)}
+                                className="w-full bg-black border border-slate-800 rounded-xl text-xs font-bold p-2 text-white focus:outline-none focus:border-amber-400 font-mono"
+                              >
+                                <option value="gems">💎 Éter Gems</option>
+                                <option value="potions">🧪 Pociones (+X)</option>
+                                <option value="all_relics">👑 Todas las Reliquias</option>
+                              </select>
+                            </div>
+
+                            {/* Value Input depending on rewardType */}
+                            {newPromoRewardType !== "all_relics" && (
+                              <div className="flex flex-col gap-1">
+                                <label className="text-[9px] uppercase font-bold text-gray-500 font-mono">Cantidad</label>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={newPromoRewardType === "gems" ? newPromoGemsValue : newPromoPotionsValue}
+                                  onChange={(e) => {
+                                    if (newPromoRewardType === "gems") {
+                                      setNewPromoGemsValue(e.target.value);
+                                    } else {
+                                      setNewPromoPotionsValue(e.target.value);
+                                    }
+                                  }}
+                                  className="w-full bg-black border border-slate-800 rounded-xl text-xs font-black p-2 text-white focus:outline-none focus:border-amber-400 font-mono"
+                                />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Action Button */}
+                          <button
+                            onClick={handleCreatePromoCode}
+                            className="w-full mt-2 py-2.5 bg-amber-500 hover:bg-amber-600 text-black font-black text-[10px] uppercase tracking-wider rounded-xl border-2 border-black shadow-[3px_3px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-[1px_1px_0px_rgba(0,0,0,1)] transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                          >
+                            <Gift className="w-4 h-4" /> Crear Cupón de Regalo
+                          </button>
+                        </div>
+
+                        {/* List of active codes */}
+                        <div className="pt-1">
+                          <label className="text-[9px] uppercase font-bold text-gray-500 font-mono block mb-1.5">// Cupones Activos Sincronizados ({promoCodes.length})</label>
+                          <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
+                            {promoCodes.map((codeObj) => (
+                              <div
+                                key={codeObj.code}
+                                className="bg-black/40 border border-slate-850 p-2 rounded-xl flex items-center justify-between gap-3 font-mono text-xs"
+                              >
+                                <div className="truncate text-left text-white">
+                                  <span className="font-black bg-amber-500/10 text-amber-400 px-1.5 py-0.5 rounded border border-amber-500/25 mr-1.5">
+                                    {codeObj.code}
+                                  </span>
+                                  <span className="text-[10px] text-gray-400 font-semibold">
+                                    {codeObj.rewardType === "gems" && `💎 +${codeObj.gemsValue} Gemas`}
+                                    {codeObj.rewardType === "potions" && `🧪 +${codeObj.potionsValue} Pociones`}
+                                    {codeObj.rewardType === "all_relics" && "👑 Desbloqueo Total Reliquias"}
+                                  </span>
+                                </div>
+                                <button
+                                  onClick={() => handleDeletePromoCode(codeObj.code)}
+                                  className="px-2 py-1 bg-red-950/40 border border-red-500/40 hover:bg-red-900 override-btn text-red-400 rounded text-[9px] font-black uppercase transition-all cursor-pointer shrink-0"
+                                >
+                                  ELIMINAR
+                                </button>
+                              </div>
+                            ))}
+                            {promoCodes.length === 0 && (
+                              <div className="text-center py-3 text-[10px] text-gray-500 italic">
+                                No hay códigos mágicos en el reino.
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
                       {/* Section: Direct Account Management (Secure admin power alternative) */}
                       <div className="space-y-2.5 bg-[#1f2937]/50 p-4 rounded-3xl border-2 border-slate-800 text-left">
                         <h4 className="text-[10px] uppercase font-black tracking-widest text-[#ef4444] flex items-center gap-1.5 border-b border-slate-800 pb-1 mb-2.5 font-mono">
@@ -905,12 +1119,22 @@ export default function AdminPanel({
                                   Récord CO: <strong className="text-amber-400">{acc.highscore}</strong> • Éter: <strong className="text-cyan-400">{acc.etherGems || 0}</strong>
                                 </span>
                               </div>
-                              <button
-                                onClick={() => handleDefaultAccountAdmin(acc)}
-                                className="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 border-2 border-black text-black rounded-lg text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center shrink-0"
-                              >
-                                DEFAULT
-                              </button>
+                              <div className="flex gap-1.5 shrink-0">
+                                <button
+                                  onClick={() => handleDefaultAccountAdmin(acc)}
+                                  className="px-2 py-1 bg-amber-500 hover:bg-amber-600 border-2 border-black text-black rounded-lg text-[8.5px] font-black uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center"
+                                  title="Renombrar temporalmente de forma aleatoria"
+                                >
+                                  DEFAULT
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteAccount(acc.username)}
+                                  className="px-2 py-1 bg-red-600 hover:bg-red-700 border-2 border-black text-white rounded-lg text-[8.5px] font-black uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center"
+                                  title="Eliminar permanentemente de la nube"
+                                >
+                                  ELIMINAR
+                                </button>
+                              </div>
                             </div>
                           ))}
                           {allAccounts.length === 0 && (

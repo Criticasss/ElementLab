@@ -28,7 +28,18 @@ service cloud.firestore {
         && data.password is string && data.password.size() <= 100
         && data.highscore is int
         && data.gamesPlayed is int
-        && (!data.keys().hasAny(['tutorialCompleted']) || data.tutorialCompleted is bool);
+        && (!data.keys().hasAny(['tutorialCompleted']) || data.tutorialCompleted is bool)
+        && (!data.keys().hasAny(['redeemedCodes']) || data.redeemedCodes is list);
+    }
+
+    function isValidPromoCode(data) {
+      return data.keys().hasAll(['code', 'rewardType', 'createdAt'])
+        && data.code is string && data.code.size() <= 40
+        && data.rewardType is string && (data.rewardType == 'gems' || data.rewardType == 'potions' || data.rewardType == 'all_relics')
+        && data.createdAt is int
+        && (!data.keys().hasAny(['gemsValue']) || data.gemsValue is int)
+        && (!data.keys().hasAny(['potionsValue']) || data.potionsValue is int)
+        && (!data.keys().hasAny(['isActive']) || data.isActive is bool);
     }
 
     match /broadcasts/{broadcastId} {
@@ -41,6 +52,12 @@ service cloud.firestore {
       allow get, list: if true;
       allow create, update: if isValidUsernameId(username) && isValidAccount(request.resource.data);
       allow delete: if isValidUsernameId(username);
+    }
+
+    match /promo_codes/{code} {
+      allow get, list: if true;
+      allow create, update: if isValidId(code) && isValidPromoCode(request.resource.data);
+      allow delete: if isValidId(code);
     }
   }
 }

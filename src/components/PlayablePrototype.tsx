@@ -4,6 +4,7 @@ import { playSound } from "../utils/audio";
 import { Account } from "./AccountManager";
 import { motion, AnimatePresence } from "motion/react";
 import { ACHIEVEMENTS_LIST } from "./AchievementsPanel";
+import SecondaryLabsManager from "./SecondaryLabsManager";
 import {
   RotateCcw,
   Sparkles,
@@ -63,6 +64,11 @@ export default function PlayablePrototype({
   onRecordGamePlay,
   onUpdateAccountData
 }: PlayablePrototypeProps) {
+  // Masteries check
+  const hasBotany = activeAccount?.labMasteries?.includes("botanical_mastery") || localStorage.getItem("alquimia_viral_masteries")?.includes("botanical_mastery");
+  const hasThermal = activeAccount?.labMasteries?.includes("thermal_mastery") || localStorage.getItem("alquimia_viral_masteries")?.includes("thermal_mastery");
+  const hasQuantum = activeAccount?.labMasteries?.includes("quantum_mastery") || localStorage.getItem("alquimia_viral_masteries")?.includes("quantum_mastery");
+
   // Game values
   const [gold, setGold] = useState(0);
   const [quota, setQuota] = useState(30);
@@ -76,6 +82,7 @@ export default function PlayablePrototype({
   const [isSoundOn, setIsSoundOn] = useState(true);
   const [gameLog, setGameLog] = useState<string[]>(["¡Bienvenido a la Rejilla de Alquimia! Coloca elementos en el tablero para generar sinergias y oro."]);
   const [selectedHandIndex, setSelectedHandIndex] = useState<number | null>(null);
+  const [dragOverCellIndex, setDragOverCellIndex] = useState<number | null>(null);
 
   // Active Achievement Unlock Toast State
   const [toastNotification, setToastNotification] = useState<{
@@ -142,7 +149,7 @@ export default function PlayablePrototype({
   };
 
   // Screen selector
-  const [activeScreen, setActiveScreen] = useState<"board" | "shop">("board");
+  const [activeScreen, setActiveScreen] = useState<"board" | "shop" | "labs">("board");
 
   // Activate Potion: Midas
   const usePotionMidas = () => {
@@ -302,7 +309,7 @@ export default function PlayablePrototype({
     setGold(0);
     setQuota(30);
     setRound(1);
-    const initialTurns = activeAccount?.relics?.includes("sello") ? 7 : 6;
+    const initialTurns = (activeAccount?.relics?.includes("sello") ? 7 : 6) + (hasQuantum ? 1 : 0);
     setTurnsLeft(initialTurns);
     setGrid(Array(9).fill(null));
     setGameLog([`Partida iniciada. Cuota objetivo: 30 de oro. ¡Tienes e inicias con ${initialTurns} turnos de colocación! ¡Buena suerte!`]);
@@ -401,7 +408,7 @@ export default function PlayablePrototype({
             name: "Flor Silvestre",
             symbol: "🌸",
             rarity: "común",
-            baseValue: 4,
+            baseValue: hasBotany ? 6 : 4,
             description: "Flor brillante. Atrae abejas."
           };
           newGrid[adjIdx] = null; // consume slot
@@ -425,7 +432,7 @@ export default function PlayablePrototype({
             name: "Flor de Oro",
             symbol: "⚜️",
             rarity: "raro",
-            baseValue: 12,
+            baseValue: hasBotany ? 15 : 12,
             description: "Planta de Alquimista pura. Genera oro masivo."
           };
           newGrid[adjIdx] = null;
@@ -453,9 +460,9 @@ export default function PlayablePrototype({
             description: "Roca sólida. Se puede forjar con volcanes para hacer Obsidiana."
           };
           newGrid[adjIdx] = null;
-          goldAwarded += 5;
+          goldAwarded += hasThermal ? 9 : 5;
           mergersHappened = true;
-          addLog("✨ ¡FUSIÓN! Fuego + Tierra cementaron una Piedra resistente (+5 Oro)");
+          addLog(hasThermal ? "✨ ¡FUSIÓN POTENCIADA! Fuego + Tierra hicieron una Piedra (Térmica Activa: +9 Oro)" : "✨ ¡FUSIÓN! Fuego + Tierra cementaron una Piedra resistente (+5 Oro)");
           effectsList.push({ gridIndex: i, text: "+5 💰", colorClass: "text-yellow-400 font-extrabold" });
           effectsList.push({ gridIndex: i, text: "🪨 Piedra", colorClass: "text-zinc-400 font-black italic" });
           break;
@@ -521,7 +528,7 @@ export default function PlayablePrototype({
               name: "Obsidiana",
               symbol: "💎",
               rarity: "legendario",
-              baseValue: 15,
+              baseValue: hasThermal ? 20 : 15,
               description: "Forjada en calor volcánico. Da oro masivo por turno."
             };
             goldAwarded += 15;
@@ -841,7 +848,7 @@ export default function PlayablePrototype({
     // Reset board variables for next round
     setRound(nextRound);
     setQuota(nextQuota);
-    const initialTurns = activeAccount?.relics?.includes("sello") ? 7 : 6;
+    const initialTurns = (activeAccount?.relics?.includes("sello") ? 7 : 6) + (hasQuantum ? 1 : 0);
     setTurnsLeft(initialTurns);
     setIsDrafting(false);
     setGrid(Array(9).fill(null)); // Clear layout for fresh placement puzzle
@@ -870,7 +877,7 @@ export default function PlayablePrototype({
 
     setRound(nextRound);
     setQuota(nextQuota);
-    const initialTurns = activeAccount?.relics?.includes("sello") ? 7 : 6;
+    const initialTurns = (activeAccount?.relics?.includes("sello") ? 7 : 6) + (hasQuantum ? 1 : 0);
     setTurnsLeft(initialTurns);
     setGrid(Array(9).fill(null));
 
@@ -998,7 +1005,7 @@ export default function PlayablePrototype({
       </div>
 
       {/* Screen selector tabs */}
-      <div className="flex border-4 border-black bg-slate-900 rounded-2xl p-1.5 gap-2 font-mono text-xs select-none">
+      <div className="flex flex-wrap border-4 border-black bg-slate-900 rounded-2xl p-1.5 gap-2 font-mono text-xs select-none">
         <button
           onClick={() => { playSound("click"); setActiveScreen("board"); }}
           className={`flex-1 py-3 px-4 rounded-xl font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer ${
@@ -1018,6 +1025,16 @@ export default function PlayablePrototype({
           }`}
         >
           🛒 Bazar de Éter y Reliquias
+        </button>
+        <button
+          onClick={() => { playSound("click"); setActiveScreen("labs"); }}
+          className={`flex-1 py-3 px-4 rounded-xl font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer ${
+            activeScreen === "labs"
+              ? "bg-[#D946EF] text-white border-2 border-black shadow-[3px_3px_0px_rgba(0,0,0,1)] scale-[1.01]"
+              : "text-gray-400 hover:text-[#D946EF]"
+          }`}
+        >
+          🧪 Lab Secundario
         </button>
       </div>
 
@@ -1051,12 +1068,36 @@ export default function PlayablePrototype({
                 <button
                   key={idx}
                   onClick={() => placeCardOnGrid(idx)}
+                  onDragOver={(e) => {
+                    if (isEmpty && hasSelection) {
+                      e.preventDefault();
+                    }
+                  }}
+                  onDragEnter={() => {
+                    if (isEmpty && hasSelection) {
+                      setDragOverCellIndex(idx);
+                    }
+                  }}
+                  onDragLeave={() => {
+                    if (dragOverCellIndex === idx) {
+                      setDragOverCellIndex(null);
+                    }
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setDragOverCellIndex(null);
+                    if (isEmpty && selectedHandIndex !== null) {
+                      placeCardOnGrid(idx);
+                    }
+                  }}
                   disabled={isEmpty && !hasSelection}
                   className={`relative p-2 rounded-2xl border-4 flex flex-col items-center justify-center gap-1 transition-all duration-300 aspect-square group ${
                     isEmpty
-                      ? hasSelection
-                        ? "bg-slate-800/20 border-blue-500/50 hover:bg-blue-500/10 hover:border-blue-500 cursor-pointer shadow-[inset_0_0_10px_rgba(59,130,246,0.15)] animate-pulse"
-                        : "bg-[#111827] border-black/40 shadow-[inset_2px_2px_5px_rgba(0,0,0,0.9)]"
+                      ? dragOverCellIndex === idx
+                        ? "bg-emerald-500/20 border-emerald-400 ring-4 ring-emerald-400/40 scale-[1.03] cursor-pointer"
+                        : hasSelection
+                          ? "bg-slate-800/20 border-blue-500/50 hover:bg-blue-500/10 hover:border-blue-500 cursor-pointer shadow-[inset_0_0_10px_rgba(59,130,246,0.15)] animate-pulse"
+                          : "bg-[#111827] border-black/40 shadow-[inset_2px_2px_5px_rgba(0,0,0,0.9)]"
                       : `${cardBgClass} border-black shadow-[4px_4px_0px_rgba(0,0,0,1)] hover:scale-105 hover:shadow-[6px_6px_0px_rgba(0,0,0,1)] active:translate-y-1 transition-transform`
                   }`}
                 >
@@ -1208,8 +1249,14 @@ export default function PlayablePrototype({
                 return (
                   <button
                     key={card.id + idx}
+                    draggable={true}
+                    onDragStart={(e) => {
+                      setSelectedHandIndex(idx);
+                      e.dataTransfer.setData("text/plain", idx.toString());
+                      e.dataTransfer.effectAllowed = "move";
+                    }}
                     onClick={() => selectHandCard(idx)}
-                    className={`p-3 rounded-2xl border-4 border-black flex flex-col items-center justify-between text-center gap-1 transition-all duration-300 cursor-pointer ${
+                    className={`p-3 rounded-2xl border-4 border-black flex flex-col items-center justify-between text-center gap-1 transition-all duration-300 cursor-grab active:cursor-grabbing ${
                       isSelected
                         ? "bg-[#10B981] text-white scale-[1.08] shadow-[5px_5px_0px_rgba(0,0,0,1)] z-10"
                         : `${rarityClass} hover:scale-[1.02] shadow-[3px_3px_0px_rgba(0,0,0,1)] hover:shadow-[4px_4px_0px_rgba(0,0,0,1)] active:translate-y-0.5`
@@ -1573,6 +1620,16 @@ export default function PlayablePrototype({
             </div>
           )}
         </div>
+      )}
+
+      {activeScreen === "labs" && (
+        <SecondaryLabsManager
+          activeAccount={activeAccount}
+          onUpdateAccountData={onUpdateAccountData}
+          isSoundOn={isSoundOn}
+          mainGold={gold}
+          setMainGold={setGold}
+        />
       )}
     </div>
   );

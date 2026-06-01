@@ -2,12 +2,89 @@
 let audioCtx: AudioContext | null = null;
 let isSoundEnabled = true;
 
+// Background music loops states
+let musicInterval: any = null;
+let isMusicPlaying = false;
+let currentChordIndex = 0;
+// Gentle atmospheric alchemical pads (G Major -> A Minor -> F Major -> G Major)
+const chords = [
+  [196.00, 246.94, 293.66, 392.00], // G3, B3, D4, G4 - G Major
+  [220.00, 261.63, 329.63, 440.00], // A3, C4, E4, A4 - A minor
+  [174.61, 220.00, 261.63, 349.23], // F3, A3, C4, F4 - F Major
+  [196.00, 246.94, 329.63, 392.00]  // G3, B3, E4, G4 - Em7/G Major ambient inversion
+];
+
+export function startBackgroundMusic() {
+  if (!isSoundEnabled || isMusicPlaying) return;
+  try {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    if (audioCtx.state === "suspended") {
+      audioCtx.resume();
+    }
+    
+    isMusicPlaying = true;
+    
+    const playNextBeat = () => {
+      if (!isMusicPlaying || !isSoundEnabled || !audioCtx) return;
+      if (audioCtx.state === "suspended") {
+        audioCtx.resume();
+      }
+      const now = audioCtx.currentTime;
+      const chord = chords[currentChordIndex];
+      
+      // Play a rolling progress of chords with slow attack and long release
+      chord.forEach((freq, noteIdx) => {
+        const osc = audioCtx!.createOscillator();
+        const gain = audioCtx!.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(freq, now + noteIdx * 0.4);
+        
+        // Dynamic envelope - super soft volume to be unintrusive bg music
+        gain.gain.setValueAtTime(0, now + noteIdx * 0.4);
+        gain.gain.linearRampToValueAtTime(0.015, now + noteIdx * 0.4 + 0.5);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + noteIdx * 0.4 + 3.0);
+        
+        osc.connect(gain);
+        gain.connect(audioCtx!.destination);
+        
+        osc.start(now + noteIdx * 0.4);
+        osc.stop(now + noteIdx * 0.4 + 3.2);
+      });
+      
+      currentChordIndex = (currentChordIndex + 1) % chords.length;
+    };
+    
+    playNextBeat();
+    if (musicInterval) clearInterval(musicInterval);
+    musicInterval = setInterval(playNextBeat, 4200);
+  } catch (error) {
+    console.error("Music synthesis failed:", error);
+  }
+}
+
+export function stopBackgroundMusic() {
+  isMusicPlaying = false;
+  if (musicInterval) {
+    clearInterval(musicInterval);
+    musicInterval = null;
+  }
+}
+
 export function toggleSound(force?: boolean): boolean {
   if (force !== undefined) {
     isSoundEnabled = force;
   } else {
     isSoundEnabled = !isSoundEnabled;
   }
+  
+  if (isSoundEnabled) {
+    startBackgroundMusic();
+  } else {
+    stopBackgroundMusic();
+  }
+  
   return isSoundEnabled;
 }
 

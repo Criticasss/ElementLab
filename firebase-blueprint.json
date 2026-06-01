@@ -24,6 +24,7 @@
         "etherGems": { "type": "integer" },
         "tutorialCompleted": { "type": "boolean" },
         "relics": { "type": "array", "items": { "type": "string" } },
+        "redeemedCodes": { "type": "array", "items": { "type": "string" } },
         "potions": {
           "type": "object",
           "properties": {
@@ -34,6 +35,20 @@
         }
       },
       "required": ["username", "password", "highscore", "gamesPlayed"]
+    },
+    "promo_code": {
+      "title": "Promo Code",
+      "description": "A promotional / gift code created by admins that users can redeem for in-game rewards",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "rewardType": { "type": "string", "enum": ["gems", "potions", "all_relics"] },
+        "gemsValue": { "type": "integer" },
+        "potionsValue": { "type": "integer" },
+        "createdAt": { "type": "integer" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["code", "rewardType", "createdAt"]
     }
   },
   "firestore": {
@@ -44,6 +59,10 @@
     "/accounts/{username}": {
       "schema": "account",
       "description": "Alchemist character account profiles."
+    },
+    "/promo_codes/{code}": {
+      "schema": "promo_code",
+      "description": "Gift promo codes generated for promotional campaigns."
     }
   }
 }
