@@ -65,6 +65,11 @@
         "opponentScores": { "type": "object" },
         "status": { "type": "string", "enum": ["pending", "active", "completed"] },
         "winner": { "type": "string" },
+        "noModifiers": { "type": "boolean" },
+        "chat": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
         "createdAt": { "type": "integer" },
         "lastUpdated": { "type": "integer" }
       },

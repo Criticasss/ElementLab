@@ -51,7 +51,9 @@ service cloud.firestore {
         && data.opponentStatus is string && (data.opponentStatus == 'playing' || data.opponentStatus == 'passed' || data.opponentStatus == 'eliminated')
         && data.status is string && (data.status == 'pending' || data.status == 'active' || data.status == 'completed')
         && data.createdAt is int
-        && data.lastUpdated is int;
+        && data.lastUpdated is int
+        && (!data.keys().hasAny(['noModifiers']) || data.noModifiers is bool)
+        && (!data.keys().hasAny(['chat']) || data.chat is list);
     }
 
     match /broadcasts/{broadcastId} {

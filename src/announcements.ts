@@ -41,13 +41,13 @@ export const ANNOUNCEMENTS_LIST: Announcement[] = [
     important: false
   },
   {
-    id: "actualizaciones",
-    title: "ESTAMOS CON LAS ACTUALIZACIONES A TOPE!",
-    date: "2026-05-27",
+    id: "duelos",
+    title: "DUELOS OUT!!!",
+    date: "2026-06-02",
     category: "Evento",
     badgeColor: "bg-pink-500 text-white",
-    emoji: "📋",
-    content: "Los fundadores estamos a tope con las actualizaciones!, queremos mejorar vuestra expericiencia siempre!",
+    emoji: "💪",
+    content: "Venimos calentitos con nuevas actualizaciones!!, Hemos sacado el nuevo evento de duelos, consiste en que 2 jugadores se enfrentan para ver quien consigue llegar mas lejos, el ganador sera recompensado con 100 GEMAS ETER! para celebrar el estreno de el evento de duelos venimos tambien con un codigito que os va a dar 150 GEMAS ETER! el codigo es: 'DUELSOUT', disfrutad de vuestras gemas!",
     important: true
   }
 ];

@@ -26,7 +26,8 @@ import {
   Play,
   ShieldAlert,
   Award,
-  Megaphone
+  Megaphone,
+  ExternalLink
 } from "lucide-react";
 
 // Minimalist animated alchemical brand logo
@@ -416,6 +417,19 @@ export default function App() {
             <div className="bg-white px-5 py-2.5 rounded-full text-black font-black text-[11px] sm:text-xs tracking-widest uppercase border-4 border-black shadow-[4px_4px_0px_#EC4899] select-none">
               LABORATORIO ABIERTO 🧪
             </div>
+
+            {/* Los Andeleros Partner Link */}
+            <a
+              href="https://losandeleros.onrender.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => {
+                playSound("click");
+              }}
+              className="px-4 py-2 bg-[#EAB308] hover:bg-[#CA8A04] border-4 border-black rounded-2xl text-xs font-black text-black tracking-widest uppercase shadow-[4px_4px_0px_rgba(0,0,0,1)] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_rgba(0,0,0,1)] active:translate-y-[4px] active:shadow-[0px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center gap-1.5 shrink-0 cursor-pointer text-center"
+            >
+              <ExternalLink className="w-4 h-4 shrink-0 text-black animate-pulse" /> LOS ANDELEROS 🎸
+            </a>
 
             {/* Admin Keypad Trigger Button */}
             <button

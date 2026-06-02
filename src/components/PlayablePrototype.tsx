@@ -1,11 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ElementSymbol, GameState, Rarity, Duel } from "../types";
 import { playSound } from "../utils/audio";
 import { Account } from "./AccountManager";
 import { motion, AnimatePresence } from "motion/react";
-import { collection, doc, setDoc, getDoc, updateDoc, onSnapshot } from "firebase/firestore";
+import { collection, doc, setDoc, getDoc, updateDoc, onSnapshot, arrayUnion } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "../firebase";
-import { Swords, LogIn, Target, ChevronDown } from "lucide-react";
+import { Swords, LogIn, Target, ChevronDown, MessageSquare, Send, X } from "lucide-react";
 import { ACHIEVEMENTS_LIST } from "./AchievementsPanel";
 import SecondaryLabsManager from "./SecondaryLabsManager";
 import {
@@ -161,7 +161,11 @@ export default function PlayablePrototype({
   const [currentActiveDuel, setCurrentActiveDuel] = useState<Duel | null>(null);
   const [opponentsList, setOpponentsList] = useState<string[]>([]);
   const [selectedOpponentName, setSelectedOpponentName] = useState<string>("");
+  const [challengeNoModifiers, setChallengeNoModifiers] = useState<boolean>(false);
   const [challengeMsg, setChallengeMsg] = useState<string>("");
+  const [activeChatDuelId, setActiveChatDuelId] = useState<string | null>(null);
+  const [chatInputText, setChatInputText] = useState("");
+  const chatBottomRef = useRef<HTMLDivElement | null>(null);
 
   // Listen to all duels in real-time
   useEffect(() => {
@@ -178,6 +182,15 @@ export default function PlayablePrototype({
     });
     return () => unsub();
   }, []);
+
+  // Auto-scroll chat to bottom
+  useEffect(() => {
+    if (activeChatDuelId && chatBottomRef.current) {
+      setTimeout(() => {
+        chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+      }, 100);
+    }
+  }, [activeChatDuelId, allDuels]);
 
   // Fetch registered alchemist list dynamically for challenging
   useEffect(() => {
@@ -233,6 +246,7 @@ export default function PlayablePrototype({
       opponentScores: {},
       status: "pending",
       winner: null,
+      noModifiers: challengeNoModifiers,
       createdAt: Date.now(),
       lastUpdated: Date.now()
     };
@@ -240,7 +254,8 @@ export default function PlayablePrototype({
     try {
       playSound("levelUp");
       await setDoc(doc(db, "duels", id), newDuel);
-      setChallengeMsg(`⚡ ¡Has retado a [${selectedOpponentName}]!`);
+      setChallengeMsg(`⚡ ¡Has retado a [${selectedOpponentName}] (${challengeNoModifiers ? "Sin Modificadores" : "Con Modificadores"})!`);
+      setChallengeNoModifiers(false);
       setTimeout(() => setChallengeMsg(""), 4000);
     } catch (e) {
       console.error("Error creating duel challenge:", e);
@@ -277,9 +292,19 @@ export default function PlayablePrototype({
     }
   };
 
+  const hasOwnedRelic = (relicId: string): boolean => {
+    if (currentActiveDuel?.noModifiers) return false;
+    return activeAccount?.relics?.includes(relicId) || false;
+  };
+
   // Activate Potion: Midas
   const usePotionMidas = () => {
     if (!activeAccount) return;
+    if (currentActiveDuel?.noModifiers) {
+      playSound("fail");
+      addLog("❌ Las pociones están deshabilitadas en duelos sin modificadores.");
+      return;
+    }
     const currentMidas = activeAccount.potions?.midas || 0;
     if (currentMidas <= 0) {
       playSound("fail");
@@ -310,6 +335,11 @@ export default function PlayablePrototype({
   // Activate Potion: Tiempo
   const usePotionTime = () => {
     if (!activeAccount) return;
+    if (currentActiveDuel?.noModifiers) {
+      playSound("fail");
+      addLog("❌ Las pociones están deshabilitadas en duelos sin modificadores.");
+      return;
+    }
     const currentTime = activeAccount.potions?.time || 0;
     if (currentTime <= 0) {
       playSound("fail");
@@ -338,6 +368,11 @@ export default function PlayablePrototype({
   // Activate Potion: Chaos
   const usePotionChaos = () => {
     if (!activeAccount) return;
+    if (currentActiveDuel?.noModifiers) {
+      playSound("fail");
+      addLog("❌ Las pociones están deshabilitadas en duelos sin modificadores.");
+      return;
+    }
     const currentChaos = activeAccount.potions?.chaos || 0;
     if (currentChaos <= 0) {
       playSound("fail");
@@ -453,7 +488,8 @@ export default function PlayablePrototype({
     setQuota(phaseQuota);
     setGold(startingGold);
     
-    const initialTurns = (activeAccount?.relics?.includes("sello") ? 7 : 6) + (hasQuantum ? 1 : 0);
+    const hasSelloRelic = !duel.noModifiers && (activeAccount?.relics?.includes("sello") || false);
+    const initialTurns = (hasSelloRelic ? 7 : 6) + (hasQuantum ? 1 : 0);
     setTurnsLeft(initialTurns);
     setGrid(Array(9).fill(null));
     setGameLog([`⚔️ ¡DUELO INICIADO contra ${duel.challenger === activeAccount?.username ? duel.opponent : duel.challenger}! Fase ${phase}. Tienes ${initialTurns} turnos. Cuota ${phaseQuota} de oro. Comienzas con ${startingGold} de oro acumulado.`]);
@@ -475,82 +511,91 @@ export default function PlayablePrototype({
   const handleSaveDuelRoundResult = async (finalGold: number) => {
     if (!currentActiveDuel || !activeAccount) return;
     
-    const isChallenger = currentActiveDuel.challenger === activeAccount.username;
-    const reachedQuota = finalGold >= quota;
-    const newStatus = reachedQuota ? "passed" : "eliminated";
-    
-    const updatedChallengerScores = { ...currentActiveDuel.challengerScores };
-    const updatedOpponentScores = { ...currentActiveDuel.opponentScores };
-    
-    let challengerStatus = currentActiveDuel.challengerStatus;
-    let opponentStatus = currentActiveDuel.opponentStatus;
-    
-    if (isChallenger) {
-      updatedChallengerScores[currentActiveDuel.currentPhase] = finalGold;
-      challengerStatus = newStatus;
-    } else {
-      updatedOpponentScores[currentActiveDuel.currentPhase] = finalGold;
-      opponentStatus = newStatus;
-    }
-    
-    // Check if both players have played this phase
-    let nextPhase = currentActiveDuel.currentPhase;
-    let duelStatus = currentActiveDuel.status;
-    let winner = currentActiveDuel.winner;
-    
-    const bothPlayed = (isChallenger && opponentStatus !== "playing") || (!isChallenger && challengerStatus !== "playing");
-    
-    if (bothPlayed) {
-      // Determine outcome of this phase!
-      const challengerScoreVal = isChallenger ? finalGold : (currentActiveDuel.challengerScores[currentActiveDuel.currentPhase] || 0);
-      const opponentScoreVal = !isChallenger ? finalGold : (currentActiveDuel.opponentScores[currentActiveDuel.currentPhase] || 0);
-      
-      const challengerPassed = challengerStatus === "passed";
-      const opponentPassed = opponentStatus === "passed";
-      
-      if (challengerPassed && !opponentPassed) {
-        duelStatus = "completed";
-        winner = currentActiveDuel.challenger;
-      } else if (!challengerPassed && opponentPassed) {
-        duelStatus = "completed";
-        winner = currentActiveDuel.opponent;
-      } else if (!challengerPassed && !opponentPassed) {
-        // Both failed! Determine by highest score on this last phase
-        if (challengerScoreVal > opponentScoreVal) {
-          duelStatus = "completed";
-          winner = currentActiveDuel.challenger;
-        } else if (opponentScoreVal > challengerScoreVal) {
-          duelStatus = "completed";
-          winner = currentActiveDuel.opponent;
-        } else {
-          duelStatus = "completed";
-          winner = "tie";
-        }
-      } else {
-        // Both succeeded, escalate to next phase!
-        nextPhase = currentActiveDuel.currentPhase + 1;
-        challengerStatus = "playing";
-        opponentStatus = "playing";
-      }
-    }
-    
-    const updatedDuel = {
-      ...currentActiveDuel,
-      currentPhase: nextPhase,
-      challengerStatus,
-      opponentStatus,
-      challengerScores: updatedChallengerScores,
-      opponentScores: updatedOpponentScores,
-      status: duelStatus,
-      winner,
-      lastUpdated: Date.now()
-    };
-    
     try {
+      // Fetch latest up-to-date duel state directly from Firestore to avoid overwriting the other player's score
+      const duelRef = doc(db, "duels", currentActiveDuel.id);
+      const duelSnap = await getDoc(duelRef);
+      
+      let targetDuel = currentActiveDuel;
+      if (duelSnap.exists()) {
+        targetDuel = duelSnap.data() as Duel;
+      }
+      
+      const isChallenger = targetDuel.challenger === activeAccount.username;
+      const reachedQuota = finalGold >= quota;
+      const newStatus = reachedQuota ? "passed" : "eliminated";
+      
+      const updatedChallengerScores = { ...targetDuel.challengerScores };
+      const updatedOpponentScores = { ...targetDuel.opponentScores };
+      
+      let challengerStatus = targetDuel.challengerStatus;
+      let opponentStatus = targetDuel.opponentStatus;
+      
+      if (isChallenger) {
+        updatedChallengerScores[targetDuel.currentPhase] = finalGold;
+        challengerStatus = newStatus;
+      } else {
+        updatedOpponentScores[targetDuel.currentPhase] = finalGold;
+        opponentStatus = newStatus;
+      }
+      
+      // Check if both players have played this phase
+      let nextPhase = targetDuel.currentPhase;
+      let duelStatus = targetDuel.status;
+      let winner = targetDuel.winner;
+      
+      const bothPlayed = (isChallenger && opponentStatus !== "playing") || (!isChallenger && challengerStatus !== "playing");
+      
+      if (bothPlayed) {
+        // Determine outcome of this phase!
+        const challengerScoreVal = isChallenger ? finalGold : (targetDuel.challengerScores[targetDuel.currentPhase] || 0);
+        const opponentScoreVal = !isChallenger ? finalGold : (targetDuel.opponentScores[targetDuel.currentPhase] || 0);
+        
+        const challengerPassed = challengerStatus === "passed";
+        const opponentPassed = opponentStatus === "passed";
+        
+        if (challengerPassed && !opponentPassed) {
+          duelStatus = "completed";
+          winner = targetDuel.challenger;
+        } else if (!challengerPassed && opponentPassed) {
+          duelStatus = "completed";
+          winner = targetDuel.opponent;
+        } else if (!challengerPassed && !opponentPassed) {
+          // Both failed! Determine by highest score on this last phase
+          if (challengerScoreVal > opponentScoreVal) {
+            duelStatus = "completed";
+            winner = targetDuel.challenger;
+          } else if (opponentScoreVal > challengerScoreVal) {
+            duelStatus = "completed";
+            winner = targetDuel.opponent;
+          } else {
+            duelStatus = "completed";
+            winner = "tie";
+          }
+        } else {
+          // Both succeeded, escalate to next phase!
+          nextPhase = targetDuel.currentPhase + 1;
+          challengerStatus = "playing";
+          opponentStatus = "playing";
+        }
+      }
+      
+      const updatedDuel = {
+        ...targetDuel,
+        currentPhase: nextPhase,
+        challengerStatus,
+        opponentStatus,
+        challengerScores: updatedChallengerScores,
+        opponentScores: updatedOpponentScores,
+        status: duelStatus,
+        winner,
+        chat: bothPlayed ? [] : (targetDuel.chat || []),
+        lastUpdated: Date.now()
+      };
+      
       playSound(reachedQuota ? "quota" : "fail");
       
       // Update the duel record in cloud
-      const duelRef = doc(db, "duels", currentActiveDuel.id);
       await setDoc(duelRef, updatedDuel);
       
       addLog(`🚀 ¡Resultado de Duelo Guardado! Logrado: ${finalGold}/${quota} Oro [${newStatus}].`);
@@ -605,78 +650,87 @@ export default function PlayablePrototype({
     if (!activeAccount) return;
     playSound("fail");
     
-    const isChallenger = duel.challenger === activeAccount.username;
-    const finalGold = 0;
-    const newStatus = "eliminated";
-    
-    const updatedChallengerScores = { ...duel.challengerScores };
-    const updatedOpponentScores = { ...duel.opponentScores };
-    
-    let challengerStatus = duel.challengerStatus;
-    let opponentStatus = duel.opponentStatus;
-    
-    if (isChallenger) {
-      updatedChallengerScores[duel.currentPhase] = finalGold;
-      challengerStatus = newStatus;
-    } else {
-      updatedOpponentScores[duel.currentPhase] = finalGold;
-      opponentStatus = newStatus;
-    }
-    
-    // Check if both players have played this phase
-    let nextPhase = duel.currentPhase;
-    let duelStatus = duel.status;
-    let winner = duel.winner;
-    
-    const bothPlayed = (isChallenger && opponentStatus !== "playing") || (!isChallenger && challengerStatus !== "playing");
-    
-    if (bothPlayed) {
-      const challengerScoreVal = isChallenger ? finalGold : (duel.challengerScores[duel.currentPhase] || 0);
-      const opponentScoreVal = !isChallenger ? finalGold : (duel.opponentScores[duel.currentPhase] || 0);
-      
-      const challengerPassed = challengerStatus === "passed";
-      const opponentPassed = opponentStatus === "passed";
-      
-      if (challengerPassed && !opponentPassed) {
-        duelStatus = "completed";
-        winner = duel.challenger;
-      } else if (!challengerPassed && opponentPassed) {
-        duelStatus = "completed";
-        winner = duel.opponent;
-      } else if (!challengerPassed && !opponentPassed) {
-        if (challengerScoreVal > opponentScoreVal) {
-          duelStatus = "completed";
-          winner = duel.challenger;
-        } else if (opponentScoreVal > challengerScoreVal) {
-          duelStatus = "completed";
-          winner = duel.opponent;
-        } else {
-          duelStatus = "completed";
-          winner = "tie";
-        }
-      } else {
-        nextPhase = duel.currentPhase + 1;
-        challengerStatus = "playing";
-        opponentStatus = "playing";
-      }
-    }
-    
-    const updatedDuel = {
-      ...duel,
-      currentPhase: nextPhase,
-      challengerStatus,
-      opponentStatus,
-      challengerScores: updatedChallengerScores,
-      opponentScores: updatedOpponentScores,
-      status: duelStatus,
-      winner,
-      lastUpdated: Date.now()
-    };
-    
     try {
+      // Fetch latest up-to-date duel state directly from Firestore to avoid overwriting the other player's score
       const duelRef = doc(db, "duels", duel.id);
+      const duelSnap = await getDoc(duelRef);
+      
+      let targetDuel = duel;
+      if (duelSnap.exists()) {
+        targetDuel = duelSnap.data() as Duel;
+      }
+      
+      const isChallenger = targetDuel.challenger === activeAccount.username;
+      const finalGold = 0;
+      const newStatus = "eliminated";
+      
+      const updatedChallengerScores = { ...targetDuel.challengerScores };
+      const updatedOpponentScores = { ...targetDuel.opponentScores };
+      
+      let challengerStatus = targetDuel.challengerStatus;
+      let opponentStatus = targetDuel.opponentStatus;
+      
+      if (isChallenger) {
+        updatedChallengerScores[targetDuel.currentPhase] = finalGold;
+        challengerStatus = newStatus;
+      } else {
+        updatedOpponentScores[targetDuel.currentPhase] = finalGold;
+        opponentStatus = newStatus;
+      }
+      
+      // Check if both players have played this phase
+      let nextPhase = targetDuel.currentPhase;
+      let duelStatus = targetDuel.status;
+      let winner = targetDuel.winner;
+      
+      const bothPlayed = (isChallenger && opponentStatus !== "playing") || (!isChallenger && challengerStatus !== "playing");
+      
+      if (bothPlayed) {
+        const challengerScoreVal = isChallenger ? finalGold : (targetDuel.challengerScores[targetDuel.currentPhase] || 0);
+        const opponentScoreVal = !isChallenger ? finalGold : (targetDuel.opponentScores[targetDuel.currentPhase] || 0);
+        
+        const challengerPassed = challengerStatus === "passed";
+        const opponentPassed = opponentStatus === "passed";
+        
+        if (challengerPassed && !opponentPassed) {
+          duelStatus = "completed";
+          winner = targetDuel.challenger;
+        } else if (!challengerPassed && opponentPassed) {
+          duelStatus = "completed";
+          winner = targetDuel.opponent;
+        } else if (!challengerPassed && !opponentPassed) {
+          if (challengerScoreVal > opponentScoreVal) {
+            duelStatus = "completed";
+            winner = targetDuel.challenger;
+          } else if (opponentScoreVal > challengerScoreVal) {
+            duelStatus = "completed";
+            winner = targetDuel.opponent;
+          } else {
+            duelStatus = "completed";
+            winner = "tie";
+          }
+        } else {
+          nextPhase = targetDuel.currentPhase + 1;
+          challengerStatus = "playing";
+          opponentStatus = "playing";
+        }
+      }
+      
+      const updatedDuel = {
+        ...targetDuel,
+        currentPhase: nextPhase,
+        challengerStatus,
+        opponentStatus,
+        challengerScores: updatedChallengerScores,
+        opponentScores: updatedOpponentScores,
+        status: duelStatus,
+        winner,
+        chat: bothPlayed ? [] : (targetDuel.chat || []),
+        lastUpdated: Date.now()
+      };
+      
       await setDoc(duelRef, updatedDuel);
-      addLog(`🏳️ Te has rendido en el duelo contra ${isChallenger ? duel.opponent : duel.challenger}. Match actualizado.`);
+      addLog(`🏳️ Te has rendido en el duelo contra ${isChallenger ? targetDuel.opponent : targetDuel.challenger}. Match actualizado.`);
       
       if (duelStatus === "completed" && winner && winner !== "tie" && winner !== "declinado") {
         try {
@@ -699,13 +753,49 @@ export default function PlayablePrototype({
     }
   };
 
+  const handleSendChatMessage = async () => {
+    if (!activeAccount || !activeChatDuelId || !chatInputText.trim()) return;
+    
+    // Retrieve the duel state corresponding to the active chat
+    const chatDuel = allDuels.find(d => d.id === activeChatDuelId);
+    if (!chatDuel) return;
+    
+    const isParticipant =
+      chatDuel.challenger.toLowerCase() === activeAccount.username.toLowerCase() ||
+      chatDuel.opponent.toLowerCase() === activeAccount.username.toLowerCase();
+    
+    if (!isParticipant) {
+      playSound("fail");
+      return;
+    }
+
+    try {
+      const duelRef = doc(db, "duels", activeChatDuelId);
+      const newMessage = {
+        id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+        sender: activeAccount.username,
+        text: chatInputText.trim(),
+        timestamp: Date.now()
+      };
+
+      playSound("click");
+      setChatInputText(""); // reset state immediately for snappy user response style
+      
+      await updateDoc(duelRef, {
+        chat: arrayUnion(newMessage)
+      });
+    } catch (e) {
+      console.error("Error writing chat message:", e);
+    }
+  };
+
   // Initialize a new game
   const startNewGame = () => {
     playSound("levelUp");
     setGold(0);
     setQuota(30);
     setRound(1);
-    const initialTurns = (activeAccount?.relics?.includes("sello") ? 7 : 6) + (hasQuantum ? 1 : 0);
+    const initialTurns = (hasOwnedRelic("sello") ? 7 : 6) + (hasQuantum ? 1 : 0);
     setTurnsLeft(initialTurns);
     setGrid(Array(9).fill(null));
     setGameLog([`Partida iniciada. Cuota objetivo: 30 de oro. ¡Tienes e inicias con ${initialTurns} turnos de colocación! ¡Buena suerte!`]);
@@ -977,7 +1067,7 @@ export default function PlayablePrototype({
 
     if (mergersHappened) {
       playSound("merge");
-      if (activeAccount?.relics?.includes("crisol")) {
+      if (hasOwnedRelic("crisol")) {
         goldAwarded += 4;
         addLog("🏺 ¡CRISOL SAGRADO! La reacción catalizó +4 de oro de reliquia.");
         const firstFilledIdx = newGrid.findIndex(cell => cell !== null);
@@ -1161,7 +1251,7 @@ export default function PlayablePrototype({
     // Gold magi checks (e.g. Mago de oro desvanecimiento)
     let cleanedGrid = [...finalGrid];
     let magiciansLeaving = 0;
-    const hasAstralMirror = activeAccount?.relics?.includes("espejo");
+    const hasAstralMirror = hasOwnedRelic("espejo");
 
     for (let i = 0; i < 9; i++) {
       const card = cleanedGrid[i];
@@ -1250,7 +1340,7 @@ export default function PlayablePrototype({
     // Reset board variables for next round
     setRound(nextRound);
     setQuota(nextQuota);
-    const initialTurns = (activeAccount?.relics?.includes("sello") ? 7 : 6) + (hasQuantum ? 1 : 0);
+    const initialTurns = (hasOwnedRelic("sello") ? 7 : 6) + (hasQuantum ? 1 : 0);
     setTurnsLeft(initialTurns);
     setIsDrafting(false);
     setGrid(Array(9).fill(null)); // Clear layout for fresh placement puzzle
@@ -1279,7 +1369,7 @@ export default function PlayablePrototype({
 
     setRound(nextRound);
     setQuota(nextQuota);
-    const initialTurns = (activeAccount?.relics?.includes("sello") ? 7 : 6) + (hasQuantum ? 1 : 0);
+    const initialTurns = (hasOwnedRelic("sello") ? 7 : 6) + (hasQuantum ? 1 : 0);
     setTurnsLeft(initialTurns);
     setGrid(Array(9).fill(null));
 
@@ -1457,7 +1547,54 @@ export default function PlayablePrototype({
       </div>
 
       {activeScreen === "board" && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <>
+          {currentActiveDuel && (
+            <div className={`mb-6 p-4 rounded-3xl border-4 border-black font-mono flex flex-col md:flex-row items-center justify-between gap-4 animate-fade-in shadow-[4px_4px_0px_rgba(0,0,0,1)] ${
+              currentActiveDuel.noModifiers ? "bg-amber-950 text-amber-200" : "bg-rose-950 text-rose-200"
+            }`}>
+              <div className="flex items-center gap-3">
+                <span className="text-3xl select-none">⚔️</span>
+                <div className="text-left">
+                  <h4 className="text-sm font-black uppercase tracking-tight text-white flex items-center gap-2">
+                    Duelo Activo: <span>{currentActiveDuel.challenger}</span> <span className="text-yellow-400">vs</span> <span>{currentActiveDuel.opponent}</span>
+                    {currentActiveDuel.noModifiers && (
+                      <span className="bg-amber-500 text-black text-[9px] font-black uppercase px-2 py-0.5 rounded border border-black animate-pulse shrink-0">
+                        SIN MODIFICADORES 🚫
+                      </span>
+                    )}
+                  </h4>
+                  <p className="text-[10px] text-gray-300 font-semibold mt-0.5">
+                    {currentActiveDuel.noModifiers 
+                      ? "Se han bloqueado y desactivado todas las pociones y efectos secundarios de reliquias compradas. ¡Victoria basada puramente en estrategias de fusión básicas!" 
+                      : "Todas tus pociones y reliquias en juego están activadas y pueden ser utilizadas estratégicamente."
+                    }
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <button
+                  onClick={() => {
+                    playSound("click");
+                    setActiveChatDuelId(currentActiveDuel.id);
+                  }}
+                  className="px-4 py-1.5 bg-pink-700 hover:bg-pink-600 active:bg-pink-800 text-white border-2 border-black rounded-xl text-xs font-black uppercase font-mono shadow-[2px_2px_0px_#000] active:translate-y-0.5 cursor-pointer flex items-center gap-1.5 transition-all select-none"
+                >
+                  <MessageSquare className="w-3.5 h-3.5 text-white" />
+                  Chat
+                  {(currentActiveDuel.chat && currentActiveDuel.chat.length > 0) && (
+                    <span className="bg-white text-black text-[9px] font-black px-1.5 py-0.5 rounded-md border border-black ml-1 shrink-0 scale-90">
+                      {currentActiveDuel.chat.length}
+                    </span>
+                  )}
+                </button>
+                <div className="px-3.5 py-1.5 bg-black/40 border-2 border-black rounded-xl text-xs font-black uppercase text-yellow-300">
+                  Fase {currentActiveDuel.currentPhase}
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Play board GRID (3x3) */}
         <div className="lg:col-span-6 flex flex-col items-center justify-center bg-[#111827] p-6 rounded-[2.5rem] border-4 border-black relative shadow-[10px_10px_0px_rgba(0,0,0,0.5)]">
           <div className="mb-4 flex justify-between w-full items-center px-1">
@@ -1751,7 +1888,11 @@ export default function PlayablePrototype({
                 <span className="text-[8.5px] text-gray-500 font-bold font-mono">// Haz clic para activarlas</span>
               </h5>
               
-              {!activeAccount ? (
+              {currentActiveDuel?.noModifiers ? (
+                <div className="text-center py-3.5 text-amber-500 font-extrabold text-[10.5px] uppercase font-mono bg-amber-950/20 border-2 border-dashed border-amber-800 rounded-xl px-2">
+                  🚫 Las pociones están deshabilitadas en este duelo libre de modificadores
+                </div>
+              ) : !activeAccount ? (
                 <div className="text-center py-2 text-gray-500 font-bold text-[10px] uppercase font-mono">
                   Registra tu cuenta para activar pociones en juego
                 </div>
@@ -1864,6 +2005,7 @@ export default function PlayablePrototype({
           </div>
         </div>
       </div>
+      </>
       )}
 
       {activeScreen === "shop" && (
@@ -2141,13 +2283,37 @@ export default function PlayablePrototype({
                     
                     return (
                       <div key={duel.id} className="border-4 border-black bg-slate-900 rounded-2xl p-4 flex flex-col gap-3 shadow-[2px_2px_0px_#000]">
-                        <div className="flex justify-between items-center bg-slate-950 p-2 rounded-xl border border-slate-800">
-                          <span className="text-xs font-black font-mono text-pink-400">
-                            🆚 Rival: <span className="text-white bg-pink-900/50 px-2 py-0.5 rounded-md border border-pink-700">{opponent}</span>
-                          </span>
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#10B981] text-black font-black uppercase">
-                            Fase {duel.currentPhase}
-                          </span>
+                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 bg-slate-950 p-2 rounded-xl border border-slate-800">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs font-black font-mono text-pink-400">
+                              🆚 Rival: <span className="text-white bg-pink-900/50 px-2 py-0.5 rounded-md border border-pink-700">{opponent}</span>
+                            </span>
+                            {duel.noModifiers && (
+                              <span className="bg-amber-500/20 text-amber-400 text-[8px] font-mono font-black uppercase px-2 py-0.5 rounded border border-amber-800 animate-pulse">
+                                Sin Modificadores
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 self-start sm:self-auto">
+                            <button
+                              onClick={() => {
+                                playSound("click");
+                                setActiveChatDuelId(duel.id);
+                              }}
+                              className="relative flex items-center gap-1 text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-slate-800 hover:bg-slate-700 text-pink-450 text-pink-400 font-extrabold border border-pink-900/30 cursor-pointer transition select-none"
+                            >
+                              <MessageSquare className="w-3 h-3 text-pink-450" />
+                              Chat
+                              {(duel.chat && duel.chat.length > 0) && (
+                                <span className="absolute -top-1.5 -right-1.5 bg-rose-600 text-white font-extrabold text-[8.5px] h-4 w-4 rounded-full flex items-center justify-center border border-black animate-bounce">
+                                  {duel.chat.length}
+                                </span>
+                              )}
+                            </button>
+                            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#10B981] text-black font-black uppercase">
+                              Fase {duel.currentPhase}
+                            </span>
+                          </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-4 text-center font-mono my-1 bg-black/30 p-2.5 rounded-xl border border-slate-800/40">
@@ -2330,6 +2496,33 @@ export default function PlayablePrototype({
                     </div>
                   </div>
 
+                  {/* Styled Switch for No Modifiers duel rules */}
+                  <div className="bg-slate-950/60 p-3.5 border-2 border-black rounded-xl flex items-center justify-between pointer-events-auto">
+                    <div className="flex flex-col text-left">
+                      <span className="text-[10px] text-amber-400 font-extrabold uppercase font-mono tracking-wider flex items-center gap-1">
+                        ⚡ Reglas: Sin Modificadores
+                      </span>
+                      <span className="text-[9.5px] text-gray-450 font-medium font-mono text-gray-400 mt-0.5 leading-relaxed">
+                        Desactiva todas las pociones y reliquias en juego. Duelo al estilo clásico.
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        playSound("click");
+                        setChallengeNoModifiers(p => !p);
+                      }}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-black transition-colors duration-150 ease-in-out focus:outline-none ${
+                        challengeNoModifiers ? 'bg-amber-500' : 'bg-slate-800'
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white border border-black shadow transition duration-150 ease-in-out ${
+                          challengeNoModifiers ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
                   {challengeMsg && (
                     <div className="font-mono text-xs p-3 bg-red-950/50 border border-rose-800 text-pink-300 rounded-xl text-center font-bold">
                       {challengeMsg}
@@ -2364,6 +2557,9 @@ export default function PlayablePrototype({
                   <div key={duel.id} className="bg-slate-900 border-2 border-slate-800 rounded-2xl p-4 flex flex-col gap-2 font-mono text-xs relative overflow-hidden">
                     <div className="flex justify-between items-center text-[10px] text-gray-400">
                       <span>Rondas jugadas: {duel.currentPhase}</span>
+                      {duel.noModifiers && (
+                        <span className="text-[8px] bg-amber-950/40 text-amber-500 font-extrabold uppercase px-1.5 border border-amber-800 rounded">Sin Mod.</span>
+                      )}
                       <span className="uppercase text-[9px] px-1.5 py-0.5 bg-slate-955 rounded border border-slate-800 font-bold">Resuelto</span>
                     </div>
 
@@ -2396,6 +2592,171 @@ export default function PlayablePrototype({
           </div>
         </div>
       )}
+
+      {/* Real-time Duel Chat Sidebar Drawer Overlay */}
+      <AnimatePresence>
+        {activeChatDuelId && (() => {
+          const chatDuel = allDuels.find(d => d.id === activeChatDuelId);
+          if (!chatDuel) return null;
+
+          const isChallenger = activeAccount && chatDuel.challenger.toLowerCase() === activeAccount.username.toLowerCase();
+          const opponent = isChallenger ? chatDuel.opponent : chatDuel.challenger;
+          
+          const isParticipant = activeAccount && (
+            chatDuel.challenger.toLowerCase() === activeAccount.username.toLowerCase() ||
+            chatDuel.opponent.toLowerCase() === activeAccount.username.toLowerCase()
+          );
+
+          return (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setActiveChatDuelId(null)}
+              className="fixed inset-0 bg-black/70 backdrop-blur-md z-50 flex justify-end"
+            >
+              <motion.div
+                initial={{ x: "100%" }}
+                animate={{ x: 0 }}
+                exit={{ x: "100%" }}
+                transition={{ type: "spring", damping: 25, stiffness: 180 }}
+                onClick={(e) => e.stopPropagation()}
+                className="w-full max-w-md bg-[#0b0f19] border-l-4 border-black h-full flex flex-col shadow-[0_0_50px_rgba(0,0,0,0.8)] relative select-none font-sans"
+              >
+                {/* Header */}
+                <div className="p-5 border-b-4 border-black bg-slate-900 flex justify-between items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="relative flex h-3 w-3 animate-pulse">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-pink-500"></span>
+                    </span>
+                    <div>
+                      <h4 className="text-sm font-black font-mono text-white uppercase tracking-tight flex items-center gap-1.5">
+                        <MessageSquare className="w-4 h-4 text-pink-400 animate-pulse" />
+                        Canal {isParticipant ? "Privado" : "Protegido"}
+                      </h4>
+                      <p className="text-[10px] text-gray-400 font-mono">
+                        Duelo: {chatDuel.challenger} vs {chatDuel.opponent}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      playSound("click");
+                      setActiveChatDuelId(null);
+                    }}
+                    className="p-1.5 rounded-xl border-2 border-black bg-slate-800 hover:bg-slate-700 text-gray-300 hover:text-white cursor-pointer active:translate-y-0.5 transition"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {!isParticipant ? (
+                  /* Access Denied Card */
+                  <div className="flex-1 p-6 flex flex-col items-center justify-center text-center gap-4 bg-slate-950/20">
+                    <div className="text-5xl">🔒</div>
+                    <h5 className="text-rose-400 font-mono font-black uppercase text-xs tracking-wider">
+                      Canal Encriptado
+                    </h5>
+                    <p className="text-xs text-gray-400 max-w-xs font-mono leading-relaxed">
+                      Este canal de comunicación alquímica privada solo está disponible para los participantes enfrentados en este Duelo (<span className="text-rose-200 font-bold">{chatDuel.challenger}</span> y <span className="text-rose-200 font-bold">{chatDuel.opponent}</span>).
+                    </p>
+                    <button
+                      onClick={() => {
+                        playSound("click");
+                        setActiveChatDuelId(null);
+                      }}
+                      className="mt-2 px-5 py-2 bg-slate-800 text-white font-black uppercase font-mono tracking-wider text-[11px] rounded-xl border-2 border-black hover:bg-slate-700 active:translate-y-0.5 cursor-pointer shadow-[2px_2px_0px_#000]"
+                    >
+                      Regresar
+                    </button>
+                  </div>
+                ) : (
+                  /* Full Chat Window */
+                  <div className="flex-1 flex flex-col h-full overflow-hidden">
+                    {/* Synchronized alert */}
+                    <div className="p-3 bg-slate-950 text-[10px] text-pink-300 font-mono border-b border-slate-900 leading-normal text-center flex items-center justify-center gap-1.5">
+                      <span>ℹ️</span> 
+                      <span>El historial se vaciará al concluir el turno de ambos jugadores (Fase {chatDuel.currentPhase}).</span>
+                    </div>
+
+                    {/* Chat Bubble List Container */}
+                    <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-black/40 flex flex-col">
+                      {(!chatDuel.chat || chatDuel.chat.length === 0) ? (
+                        <div className="my-auto text-center py-12 flex flex-col items-center justify-center gap-3">
+                          <div className="text-3xl text-slate-700 animate-bounce">💬</div>
+                          <div className="text-xs text-gray-500 font-mono">
+                            No hay mensajes en esta fase.<br />
+                            ¡Comienza el diálogo estratégico!
+                          </div>
+                        </div>
+                      ) : (
+                        chatDuel.chat.map((msg) => {
+                          const isMe = activeAccount && msg.sender.toLowerCase() === activeAccount.username.toLowerCase();
+                          const msgHour = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+                          return (
+                            <div
+                              key={msg.id}
+                              className={`flex flex-col max-w-[80%] ${isMe ? "self-end items-end" : "self-start items-start"}`}
+                            >
+                              <div className="text-[9px] font-bold font-mono text-gray-500 mb-0.5 px-1 uppercase flex items-center gap-1">
+                                <span>{msg.sender}</span>
+                                {isMe && <span className="text-pink-400 font-black font-sans text-[7.5px]">(TÚ)</span>}
+                              </div>
+                              <div
+                                className={`p-3 rounded-2xl text-xs font-mono border-2 border-black leading-relaxed ${
+                                  isMe
+                                    ? "bg-pink-950/60 border-pink-800 text-pink-100 rounded-tr-none shadow-[2px_2px_0px_rgba(0,0,0,0.5)]"
+                                    : "bg-slate-950 border-slate-800 text-gray-100 rounded-tl-none shadow-[2px_2px_0px_rgba(0,0,0,0.5)]"
+                                }`}
+                              >
+                                {msg.text}
+                              </div>
+                              <span className="text-[8px] font-mono text-gray-600 mt-1 px-1">
+                                {msgHour}
+                              </span>
+                            </div>
+                          );
+                        })
+                      )}
+                      <div ref={chatBottomRef} />
+                    </div>
+
+                    {/* Sender Form footer */}
+                    <div className="p-4 bg-slate-900 border-t-4 border-black flex gap-2">
+                      <input
+                        type="text"
+                        value={chatInputText}
+                        onChange={(e) => setChatInputText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleSendChatMessage();
+                          }
+                        }}
+                        placeholder="Escribe un mensaje de honor..."
+                        className="flex-1 bg-black border-2 border-black rounded-xl px-3 py-2 text-xs font-mono text-white placeholder-slate-600 outline-none focus:ring-2 focus:ring-pink-500/50 transition-all cursor-text"
+                      />
+                      <button
+                        onClick={handleSendChatMessage}
+                        disabled={!chatInputText.trim()}
+                        className={`p-2.5 rounded-xl border-2 border-black flex items-center justify-center shrink-0 transition-all ${
+                          chatInputText.trim()
+                            ? "bg-pink-600 hover:bg-pink-500 text-white shadow-[2px_2px_0px_#000] active:translate-y-0.5 cursor-pointer"
+                            : "bg-slate-800 text-slate-500 cursor-not-allowed border-none shadow-none"
+                        }`}
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            </motion.div>
+          );
+        })()}
+      </AnimatePresence>
     </div>
   );
 }

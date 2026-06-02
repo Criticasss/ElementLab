@@ -111,6 +111,13 @@ export const GAME_CONCEPTS_LIST: DesignBlueprint[] = [
   }
 ];
 
+export interface DuelMessage {
+  id: string;
+  sender: string;
+  text: string;
+  timestamp: number;
+}
+
 export interface Duel {
   id: string;
   challenger: string;
@@ -122,6 +129,8 @@ export interface Duel {
   opponentScores: { [phase: number]: number };
   status: "pending" | "active" | "completed";
   winner: string | null; // username of player, 'tie', or null if in progress
+  noModifiers?: boolean;
+  chat?: DuelMessage[];
   createdAt: number;
   lastUpdated: number;
 }
