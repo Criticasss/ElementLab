@@ -54,6 +54,36 @@ export default function AdminPanel({
   const [allDuels, setAllDuels] = useState<any[]>([]);
   const [duelChallengerInput, setDuelChallengerInput] = useState<string>("");
   const [duelOpponentInput, setDuelOpponentInput] = useState<string>("");
+  const [maintenanceActive, setMaintenanceActive] = useState<boolean>(false);
+
+  // Listen to system maintenance status in real-time
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "broadcasts", "maintenance"), (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        setMaintenanceActive(data.message === "MAINTENANCE_ACTIVE");
+      } else {
+        setMaintenanceActive(false);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  const handleToggleMaintenance = async () => {
+    playSound("click");
+    const newState = !maintenanceActive;
+    try {
+      const docData = {
+        message: newState ? "MAINTENANCE_ACTIVE" : "MAINTENANCE_INACTIVE",
+        author: activeAccount?.username || "Administrador",
+        timestamp: Date.now()
+      };
+      await setDoc(doc(db, "broadcasts", "maintenance"), docData);
+      setStatusLog(`Mantenimiento global ${newState ? "ACTIVADO" : "DESACTIVADO"}.`);
+    } catch (e: any) {
+      handleFirestoreError(e, OperationType.WRITE, "broadcasts/maintenance");
+    }
+  };
 
   // Listen to all duels when authenticated
   useEffect(() => {
@@ -863,6 +893,39 @@ export default function AdminPanel({
                         >
                           Apagar Marquesina Activa
                         </button>
+                      </div>
+
+                      {/* Section: Global System Maintenance Mode */}
+                      <div className="space-y-2 bg-[#1f2937]/50 p-4 rounded-3xl border-2 border-slate-800 text-left">
+                        <h4 className="text-[10px] uppercase font-black tracking-widest text-amber-500 flex items-center gap-1.5 border-b border-slate-800 pb-1 mb-2.5 font-mono">
+                          🛠️ Control del Mantenimiento Global de la Web
+                        </h4>
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-black/40 p-3 rounded-2xl border border-slate-800">
+                          <div className="flex flex-col">
+                            <span className="text-xs font-mono font-black text-white flex items-center gap-1.5">
+                              {maintenanceActive ? (
+                                <span className="text-rose-500 animate-pulse">🔴 ESTADO: EN MANTENIMIENTO</span>
+                              ) : (
+                                <span className="text-[#10B981]">🟢 ESTADO: OPERATIVO / ABIERTO</span>
+                              )}
+                            </span>
+                            <p className="text-[9.5px] font-mono text-gray-400 mt-1 leading-relaxed">
+                              {maintenanceActive 
+                                ? "Los alquimistas verán la pantalla de mantenimiento. Podrás apagarlo desde aquí o con el botón de Acceso Administrativo en la pantalla de bloqueo."
+                                : "La plataforma está abierta y disponible para el público en general."}
+                            </p>
+                          </div>
+                          <button
+                            onClick={handleToggleMaintenance}
+                            className={`px-4 py-2 border-2 border-black font-black text-[10px] uppercase rounded-xl transition-all cursor-pointer shadow-[2px_2px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-[1px_1px_0px_rgba(0,0,0,1)] shrink-0 ${
+                              maintenanceActive
+                                ? "bg-emerald-600 hover:bg-emerald-500 text-white"
+                                : "bg-rose-700 hover:bg-rose-600 text-white"
+                            }`}
+                          >
+                            {maintenanceActive ? "Abrir Plataforma" : "Poner en Mantenimiento"}
+                          </button>
+                        </div>
                       </div>
 
                       {/* Section: Custom Themes / Style Sintonizer */}

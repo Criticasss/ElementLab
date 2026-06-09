@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { doc, onSnapshot, updateDoc } from "firebase/firestore";
+import { doc, onSnapshot, updateDoc, setDoc } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "./firebase";
 import GameConceptCatalog from "./components/GameConceptCatalog";
 import PlayablePrototype from "./components/PlayablePrototype";
@@ -25,6 +25,8 @@ import {
   Terminal,
   Play,
   ShieldAlert,
+  Wrench,
+  Lock,
   Award,
   Megaphone,
   ExternalLink
@@ -103,6 +105,40 @@ export default function App() {
     author: string;
     timestamp: number;
   } | null>(null);
+  const [maintenanceActive, setMaintenanceActive] = useState(false);
+  const [localBypassMaintenance, setLocalBypassMaintenance] = useState(() => {
+    try {
+      return sessionStorage.getItem("local_maintenance_bypass") === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  const [showBypassModal, setShowBypassModal] = useState(false);
+  const [bypassPassword, setBypassPassword] = useState("");
+  const [bypassError, setBypassError] = useState<string | null>(null);
+
+  // No keyboard shortcut needed as we use the clearly visible bypass button on screen
+
+  const handleDisableMaintenance = async () => {
+    if (bypassPassword === "0072" || bypassPassword.toUpperCase() === "FORJA_MAESTRA") {
+      try {
+        sessionStorage.setItem("local_maintenance_bypass", "true");
+        setLocalBypassMaintenance(true);
+        setShowBypassModal(false);
+        setBypassPassword("");
+        setBypassError(null);
+        playSound("levelUp");
+      } catch (e) {
+        console.error("Error setting bypass state:", e);
+        setBypassError("Error al guardar acceso local.");
+        playSound("fail");
+      }
+    } else {
+      playSound("fail");
+      setBypassError("Código maestro incorrecto.");
+    }
+  };
 
   useEffect(() => {
     // 1. Subscribe to Firestore broadcasts in real-time
@@ -126,6 +162,23 @@ export default function App() {
       handleFirestoreError(error, OperationType.GET, "broadcasts/global");
     });
 
+    // 1b. Subscribe to Maintenance Mode in real-time
+    const maintRef = doc(db, "broadcasts", "maintenance");
+    const unsubscribeMaintenance = onSnapshot(maintRef, (snapshot) => {
+      try {
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          setMaintenanceActive(data.message === "MAINTENANCE_ACTIVE");
+        } else {
+          setMaintenanceActive(false);
+        }
+      } catch (e) {
+        console.error("Error reading maintenance status:", e);
+      }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, "broadcasts/maintenance");
+    });
+
     // 2. Storage event listener for local themes or older storage sync
     const handleStorageChange = () => {
       try {
@@ -140,6 +193,7 @@ export default function App() {
 
     return () => {
       unsubscribeBroadcast();
+      unsubscribeMaintenance();
       window.removeEventListener("storage", handleStorageChange);
       window.removeEventListener("local-broadcast-update", handleStorageChange);
     };
@@ -327,7 +381,163 @@ export default function App() {
   };
 
   return (
-    <div className={`min-h-screen text-slate-100 font-sans relative overflow-x-hidden flex flex-col justify-between transition-colors duration-1000 ${currentTheme.wrapperBg} ${currentTheme.selectionColor}`}>
+    <>
+      {/* Real-time Global Maintenance Lock Screen Overlaid early */}
+      {(maintenanceActive && !localBypassMaintenance) && (
+        <div className="fixed inset-0 z-[9999] bg-[#060a13] text-slate-100 font-sans flex flex-col items-center justify-center p-6 md:p-12 overflow-hidden select-none">
+          {/* Background cosmic glow */}
+          <div className="absolute top-1/4 left-1/4 w-[35rem] h-[35rem] rounded-full filter blur-[120px] bg-amber-500/10 pointer-events-none animate-pulse"></div>
+          <div className="absolute bottom-1/4 right-1/4 w-[35rem] h-[35rem] rounded-full filter blur-[120px] bg-[#4f46e5]/10 pointer-events-none animate-pulse"></div>
+
+          {/* Floating dust particles */}
+          <div className="absolute inset-0 pointer-events-none opacity-40">
+            <div className="absolute top-12 left-1/4 w-1 h-1 bg-yellow-400 rounded-full animate-ping"></div>
+            <div className="absolute bottom-24 right-1/3 w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce"></div>
+            <div className="absolute top-1/3 right-12 w-1.5 h-1.5 bg-pink-400 rounded-full animate-ping"></div>
+            <div className="absolute bottom-1/3 left-10 w-1 h-1 bg-cyan-400 rounded-full animate-bounce"></div>
+          </div>
+
+          {/* Container Card */}
+          <div className="max-w-xl w-full text-center bg-[#0d1527] border-4 border-black rounded-[2.5rem] p-8 md:p-12 shadow-[10px_10px_0px_#000] relative z-10 flex flex-col items-center gap-6">
+            
+            {/* Animated Alchemical Spinner */}
+            <div className="relative w-24 h-24 flex items-center justify-center scale-110">
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
+                className="absolute inset-0 rounded-full border-4 border-dashed border-amber-400/40"
+              />
+              <motion.div
+                animate={{ rotate: -360 }}
+                transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
+                className="absolute w-[80%] h-[80%] rounded-full border-2 border-dashed border-indigo-400/35"
+              />
+              <motion.div
+                animate={{ scale: [1, 1.1, 1] }}
+                transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                className="absolute w-12 h-12 bg-black border-4 border-black rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(245,158,11,0.4)]"
+              >
+                <Wrench className="w-6 h-6 text-amber-400 animate-pulse" />
+              </motion.div>
+            </div>
+
+            <div className="space-y-3 p-1">
+              <h1 className="text-3xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-pink-500 to-indigo-400 uppercase tracking-tight italic select-none">
+                REINO EN MANTENIMIENTO
+              </h1>
+              <p className="text-cyan-400 text-xs sm:text-xs font-black tracking-widest uppercase font-mono select-none animate-pulse">
+                🧪 TRANSMUTANDO EL CÓDIGO SAGRADO 🧪
+              </p>
+            </div>
+
+            <p className="text-gray-400 text-xs md:text-sm font-medium leading-relaxed max-w-sm font-sans">
+              Las forjas alquímicas del laboratorio se encuentran actualmente apagadas por labores de mantenimiento y mejora estructural del sistema. Estamos canalizando nuevas energías cósmicas y fórmulas de fusión.
+            </p>
+
+            <div className="w-full bg-black/40 border-2 border-black rounded-2xl p-4 flex flex-col justify-center items-center gap-2.5">
+              <div className="flex items-center gap-2 text-rose-400 text-xs font-bold font-mono">
+                <Lock className="w-4 h-4 animate-bounce" /> ACCESO TEMPORALMENTE RESTRINGIDO
+              </div>
+              <p className="text-[10px] text-gray-500 font-mono leading-relaxed">
+                ¡Regresaremos pronto! Conservaremos tus récords, elementos descubiertos y oro acumulado intactos.
+              </p>
+            </div>
+
+            {/* Highly visible Admin button to open password prompt */}
+            <button
+              onClick={() => {
+                playSound("click");
+                setShowBypassModal(true);
+              }}
+              className="mt-2 px-6 py-2.5 bg-amber-500 hover:bg-amber-400 text-black font-black uppercase text-xs rounded-xl border-2 border-black shadow-[4px_4px_0px_#000] active:translate-y-0.5 active:shadow-[1px_1px_0px_#000] cursor-pointer transition select-none tracking-wider font-mono flex items-center gap-2"
+            >
+              <Wrench className="w-4 h-4" /> Acceso Administrativo (Apagar)
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Emergency Bypass Password Modal */}
+      <AnimatePresence>
+        {showBypassModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-md z-[10000] flex items-center justify-center p-4 font-sans"
+            onClick={() => {
+              setShowBypassModal(false);
+              setBypassPassword("");
+              setBypassError(null);
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="bg-[#0b0f19] border-4 border-black w-full max-w-sm rounded-[2rem] p-6 shadow-[0_0_50px_rgba(0,0,0,0.8)] relative"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                onClick={() => {
+                  playSound("click");
+                  setShowBypassModal(false);
+                  setBypassPassword("");
+                  setBypassError(null);
+                }}
+                className="absolute top-4 right-4 p-1.5 rounded-xl border-2 border-black bg-slate-800 hover:bg-slate-700 text-gray-300 hover:text-white cursor-pointer active:translate-y-0.5"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              <div className="text-center space-y-4">
+                <div className="w-12 h-12 bg-amber-500/20 text-amber-400 border-2 border-amber-500/50 rounded-2xl flex items-center justify-center mx-auto shadow-[0_0_15px_rgba(245,158,11,0.2)] animate-pulse">
+                  <Lock className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-white text-md uppercase font-mono tracking-tight">
+                    Forzar Desactivación
+                  </h3>
+                  <p className="text-[10px] text-gray-400 font-mono mt-1 leading-normal">
+                    Introduce la clave de administración para restaurar el acceso universal inmediato.
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <input
+                    type="password"
+                    placeholder="••••"
+                    value={bypassPassword}
+                    onChange={(e) => setBypassPassword(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        handleDisableMaintenance();
+                      }
+                    }}
+                    className="w-full bg-black border-2 border-black rounded-xl p-3 text-center text-sm font-mono text-white placeholder-slate-700 outline-none focus:ring-2 focus:ring-amber-500 transition-all text-lg tracking-widest cursor-text"
+                    autoFocus
+                  />
+
+                  {bypassError && (
+                    <p className="text-rose-500 text-[10px] font-mono bg-rose-950/20 border border-rose-900/50 py-1.5 px-3 rounded-lg font-bold leading-normal">
+                      ⚠️ {bypassError}
+                    </p>
+                  )}
+
+                  <button
+                    onClick={handleDisableMaintenance}
+                    className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-black font-black uppercase text-xs rounded-xl border-2 border-black shadow-[3px_3px_0px_#000] active:translate-y-0.5 active:shadow-[1px_1px_0px_#000] cursor-pointer transition select-none tracking-wider font-mono"
+                  >
+                    Desactivar Mantenimiento
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className={`min-h-screen text-slate-100 font-sans relative overflow-x-hidden flex flex-col justify-between transition-colors duration-1000 ${currentTheme.wrapperBg} ${currentTheme.selectionColor}`}>
       {/* Background Gradients */}
       <div className={`absolute top-0 left-1/4 w-[35rem] h-[35rem] rounded-full filter blur-[100px] pointer-events-none transition-colors duration-1000 ${currentTheme.glow1}`}></div>
       <div className={`absolute bottom-10 right-1/4 w-[30rem] h-[30rem] rounded-full filter blur-[100px] pointer-events-none transition-colors duration-1000 ${currentTheme.glow2}`}></div>
@@ -666,5 +876,6 @@ export default function App() {
         </div>
       </footer>
     </div>
+    </>
   );
 }
